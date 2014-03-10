@@ -35,4 +35,23 @@ class Client
     return
   end
 
+  # Given a job, pop a task to it
+  def run_job_on_given_worker(uuid, worker)
+    task = None
+    @submitted_jobs_mutex.synchronize do
+      task = @submitted_jobs[uuid].pop(true)
+    end
+    run_task_on_worker(task, uuid, worker) # TODO: run asynchronously
+  rescue ThreadError
+    # Nothing to pop in the queue
+    return
+  end
+
+  def run_task_on_worker(task, uuid, worker)
+    # TODO: Task execution failure???
+    worker = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::WORKER[worker])
+    worker.run_task(task, uuid)
+    @submitted_jobs_mutex.synchronize { @dispatcher.job_done(uuid) if @submitted_jobs[uuid].empty}
+  end
+
 end

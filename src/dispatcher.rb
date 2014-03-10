@@ -19,12 +19,8 @@ class Dispatcher
     # TODO: Generate and return UUID for jobs
   end
 
-  # Call backs
-  def on_job_submission(job)
-    # TODO: Reschedule jobs
-  end
-
-  def on_job_done()
+  def job_done(uuid)
+    # TODO: Remove entries and queues
     # TODO: Reschedule jobs
   end
 
