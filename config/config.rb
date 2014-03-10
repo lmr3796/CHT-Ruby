@@ -7,8 +7,9 @@ module CHT_Configuration
       'cht4' => {:address => '192.168.10.229',    :port => 10003},
       'cht5' => {:address => '192.168.10.18',     :port => 10004}
     }
-    def get_uri(addr)
-      return "druby://#{addr[:address]}:#{addr[:port]}"
+
+    def self.druby_uri(socket)
+      return "druby://#{socket[:address]}:#{socket[:port]}"
     end
   end
 end
