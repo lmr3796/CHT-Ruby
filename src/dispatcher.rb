@@ -1,6 +1,6 @@
 require 'thread'
 
-require 'src/decision_maker'
+require_relative 'decision_maker'
 class Dispatcher
   attr_accessor :status_checker, :decision_maker
 

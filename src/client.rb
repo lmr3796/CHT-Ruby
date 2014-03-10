@@ -1,7 +1,7 @@
 require 'drb'
 
-require 'config/config'
-require 'src/job'
+require_relative '../config/config'
+require_relative 'job'
 
 class Client
 
