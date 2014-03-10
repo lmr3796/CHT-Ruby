@@ -4,9 +4,9 @@ require './config.rb'
 class Client
 
   def initialize()
-    dispatcher_uri = "druby://#{CHT::Config::DISPATCHER[:address]}:#{CHT::Config::DISPATCHER[:port]}"
-    @dispatcher = DRb.new_with_uri dispatcher_uri
     DRb.start_service
+    dispatcher_uri = CHT::Config::druby_uri(CHT::Config::DISPATCHER)
+    @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
 
     # Ruby hashes are not thread safe; it must be protected by a mutex
     # TODO: read-write lock instead
@@ -33,3 +33,5 @@ class Client
   end
 
 end
+
+Client.new
