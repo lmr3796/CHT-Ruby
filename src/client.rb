@@ -1,5 +1,7 @@
 require 'drb'
-require './config.rb'
+
+require_relative '../config/config'
+require_relative 'job'
 
 class Client
 
