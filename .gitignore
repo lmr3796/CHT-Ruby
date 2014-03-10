@@ -17,5 +17,5 @@ tmp
 _yardoc
 doc/
 
-.swp
-.log
+*.swp
+*.log
