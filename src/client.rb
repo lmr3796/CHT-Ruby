@@ -3,12 +3,13 @@ require 'drb'
 require_relative '../config/config'
 require_relative 'job'
 
+# TODO: make client job queue table another class and abstracts the mutex calls
 class Client
 
   def initialize()
-    dispatcher_uri = "druby://#{CHT::Config::DISPATCHER[:address]}:#{CHT::Config::DISPATCHER[:port]}"
-    @dispatcher = DRb.new_with_uri dispatcher_uri
     DRb.start_service
+
+    @dispatcher = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::DISPATCHER)
 
     # Ruby hashes are not thread safe; it must be protected by a mutex
     # TODO: read-write lock instead
