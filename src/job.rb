@@ -17,8 +17,9 @@ class Job
 end
 
 class Task
-  attr_reader :cmd
-  def initialize(cmd)
+  attr_reader :cmd, :args
+  def initialize(cmd, args=nil)
     @cmd = cmd
+    @args = args
   end
 end
