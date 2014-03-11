@@ -20,4 +20,10 @@ class ReadWriteLockHash
       @underlying_hash[key] = value
     }
   end
+
+  def delete(key)
+    @read_write_lock.with_write_lock{
+      @underlying_hash.delete(key)
+    }
+  end
 end
