@@ -1,61 +1,70 @@
 require 'drb'
+require 'thread'
+require 'sync'
 
 require_relative '../config/config'
 require_relative 'job'
+require_relative 'read_write_lock_hash'
+require_relative 'thread_pool'
 
-# TODO: make client job queue table another class and abstracts the mutex calls
+
 class Client
+
+  THREAD_POOL_SIZE = 32
 
   def initialize()
     DRb.start_service
-    dispatcher_uri = CHT::Config::druby_uri(CHT::Config::DISPATCHER)
-    @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
+    @dispatcher = DRbObject.new_with_uri CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
 
-    @dispatcher = DRb.new_with_uri CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
-
-    # Ruby hashes are not thread safe; it must be protected by a mutex
-    # TODO: read-write lock instead
-    @submitted_jobs_mutex = Mutex.new
-    @submitted_jobs = {}
+    @submitted_jobs = ReadWriteLockHash.new
+    @thread_pool = ThreadPool.new(THREAD_POOL_SIZE)
   end
 
-  def send_job(job)
+  def start(jobs)
+    uuid_list = send_jobs(jobs)
+    #For each job, create a thread in thread pool to run the tasks
+    uuid_list.each{ |uuid|
+      @thread_pool.schedule{
+        run_job(uuid)
+      }
+    }
+  end
+
+  def run_job(uuid)
+    task_queue = @submitted_jobs[uuid]
+    until task_queue.empty? do
+      task = task_queue.pop
+      worker = @dispatcher.require_worker(uuid)
+      @thread_pool.schedule{
+        run_task_on_worker(task, uuid, worker)
+      }
+    end
+    #TODO: Task execution failure???
+    @dispatcher.job_done(uuid)
+  end
+
+  def send_jobs(jobs)
     # Convert to a job list if a single job passed
-    job = [job] unless jobs.is_a? Array
-    job.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a(Job)}
-    uuid_list = @dispatcher.submit_jobs(job)
+    jobs = [jobs] unless jobs.is_a? Array
+    jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a(Job)}
+    uuid_list = @dispatcher.submit_jobs(jobs)
     raise 'Submission failed' if !uuid_list or !uuid_list.is_a? Array
 
     # Build a task queue for each job, indexed with uuid returned from dispatcher
-    @submitted_jobs_mutex.synchronize {
-      uuid_list.each_with_index{|uuid, index|
-        task_queue = Queue.new
-        job[index].each {|x| task_queue.push x}
-        @submitted_jobs[uuid] = task_queue
-      }
+    uuid_list.each_with_index{|uuid, index|
+      task_queue = Queue.new
+      jobs[index].each {|x| task_queue.push x}
+      @task_count[uuid] = jobs[index].size
+      @submitted_jobs[uuid] = task_queue
     }
-    return
-  end
-
-  # Given a job, pop a task to it
-  def run_job_on_given_worker(uuid, worker)
-    task = None
-    @submitted_jobs_mutex.synchronize do
-      task = @submitted_jobs[uuid].pop(true)
-    end
-    run_task_on_worker(task, uuid, worker) # TODO: run asynchronously
-  rescue ThreadError
-    # Nothing to pop in the queue
-    return
+    return uuid_list
   end
 
   def run_task_on_worker(task, uuid, worker)
     # TODO: Task execution failure???
     worker = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::WORKER[worker])
     worker.run_task(task, uuid)
-    @submitted_jobs_mutex.synchronize { @dispatcher.job_done(uuid) if @submitted_jobs[uuid].empty}
   end
 
+  private :run_job, :send_jobs, :run_task_on_worker
 end
-
-Client.new
