@@ -22,15 +22,11 @@ class Dispatcher
   end
 
   def submit_jobs(job_list)
+    uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @table_mutex.synchronize {
-      size = job_list.size
-      uuid_list = Array.new(size) { |index|
-        uuid = SecureRandom.uuid
-        @job_list[uuid] = job_list[index]
-        uuid
-      }
-      reschedule_jobs()
-      uuid_list.each { |uuid|
+      @job_list.merge! uuid_table
+      reschedule_jobs() 
+      uuid_table.keys.each { |uuid|
         @job_worker_table[uuid].each { |worker|
           @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
         }

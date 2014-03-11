@@ -30,4 +30,20 @@ class ReadWriteLockHash
   def keys()
     return @underlying_hash.keys
   end
+
+  def merge(hash, &block)
+    res = nil
+    @read_write_lock.with_read_lock{
+      res = @underlying_hash.merge(hash, &block)
+    }
+    return res
+  end
+
+  def merge!(hash, &block)
+    res = nil
+    @read_write_lock.with_write_lock{
+      res = @underlying_hash.merge!(hash, &block)
+    }
+  end
+
 end
