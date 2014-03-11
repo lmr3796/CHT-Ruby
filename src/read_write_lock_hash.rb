@@ -26,4 +26,8 @@ class ReadWriteLockHash
       @underlying_hash.delete(key)
     }
   end
+
+  def keys()
+    return @underlying_hash.keys
+  end
 end
