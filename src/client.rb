@@ -1,6 +1,5 @@
 require 'drb'
 require 'thread'
-require 'sync'
 
 require_relative '../config/config'
 require_relative 'job'
