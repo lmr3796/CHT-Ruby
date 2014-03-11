@@ -22,8 +22,6 @@ class Dispatcher
   end
 
   def submit_jobs(job_list)
-    # TODO: accept jobs
-    # TODO: Generate and return UUID for jobs
     @table_mutex.synchronize {
       size = job_list.size
       uuid_list = Array.new(size) { |index|
@@ -38,7 +36,7 @@ class Dispatcher
         }
       }
     }
-    return uuid_list
+    return uuid_list  # Returning a UUID list stands for acceptance
   end
 
   def job_done(uuid)
@@ -69,7 +67,7 @@ class Dispatcher
     StatucChecker.set_status(worker, StatusChecker::OCCUPIED)
   end
 
-  def reschedule_jobs()
+  def reschedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
     if @table_mutex.owned?
       @job_worker_table = decision_maker.schedule_jobs(@job_list)
       @worker_job_table = ReadWriteLockHash.new
