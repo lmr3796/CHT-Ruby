@@ -1,5 +1,6 @@
 require 'drb'
 require 'thread'
+require 'sync'
 
 require_relative '../config/config'
 require_relative 'job'
@@ -50,7 +51,8 @@ class Client
     raise 'Submission failed' if !uuid_list or !uuid_list.is_a? Array
 
     # Build a task queue for each job, indexed with uuid returned from dispatcher
-    uuid_list.each_with_index{|uuid, index|
+    uuid_list.each_index{|index|
+      uuid = uuid_list[index]
       task_queue = Queue.new
       jobs[index].each {|x| task_queue.push x}
       @task_count[uuid] = jobs[index].size
