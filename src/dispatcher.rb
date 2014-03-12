@@ -22,7 +22,7 @@ class Dispatcher
     uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @table_mutex.synchronize {
       @job_list.merge! uuid_table
-      reschedule_jobs() 
+      schedule_jobs() 
       uuid_table.keys.each { |uuid|
         @job_worker_table[uuid].each { |worker|
           @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
@@ -58,7 +58,7 @@ class Dispatcher
   end
 
   # General APIs
-  def reschedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
+  def schedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
     if @table_mutex.owned?
       @job_worker_table = decision_maker.schedule_jobs(@job_list)
       @worker_job_table = ReadWriteLockHash.new
