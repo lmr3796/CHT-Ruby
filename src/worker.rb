@@ -3,11 +3,18 @@ require 'open3'
 require_relative 'job.rb'
 
 class Worker
+  attr_reader :name
+
   STATE={
     :OCCUPIED => :OCCUPIED,
     :AVAILABLE => :AVAILABLE,
     :BUSY => :BUSY,
   }
+
+  def initialize(name)
+    @name = name
+  end
+
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
     return run_cmd(task.cmd, task.args)
