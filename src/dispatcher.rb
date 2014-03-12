@@ -54,7 +54,7 @@ class Dispatcher
     @table_mutex.synchronize {
       @job_worker_queues[ @worker_job_table[worker] ].push(worker)
       @statusChecker.occupy_worker worker
-    } unless @worker_job_table.has_key? worker 
+    } if @worker_job_table.has_key? worker 
   end
 
   # General APIs
