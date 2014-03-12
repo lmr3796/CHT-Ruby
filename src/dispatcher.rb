@@ -50,17 +50,17 @@ class Dispatcher
 
   def on_worker_available(worker)
     # TODO: Push into corresponding queue
-    if !(@worker_job_table.has_key? worker)
-      return
-    end
+    StatusChecker.set_status(worker, Worker::STATE[:AVAILABLE])
+    return if !@worker_job_table.has_key? worker  # Not assigned
     if @table_mutex.owned?
       @job_worker_queues[ @worker_job_table[worker] ].push(worker)
+      StatusChecker.set_status(worker, Worker::STATE[:OCCUPIED])
     else
       @table_mutex.synchronize {
         @job_worker_queues[ @worker_job_table[worker] ].push(worker)
+        StatusChecker.set_status(worker, Worker::STATE[:OCCUPIED])
       }
     end
-    StatucChecker.set_status(worker, StatusChecker::OCCUPIED)
   end
 
   def reschedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
