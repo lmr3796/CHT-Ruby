@@ -40,9 +40,8 @@ class ReadWriteLockHash
   end
 
   def merge!(hash, &block)
-    res = nil
     @read_write_lock.with_write_lock{
-      res = @underlying_hash.merge!(hash, &block)
+      @underlying_hash.merge!(hash, &block)
     }
   end
 
