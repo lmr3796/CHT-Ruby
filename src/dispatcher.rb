@@ -17,11 +17,7 @@ class Dispatcher
     @decision_maker = arg[:decision_maker]
   end
 
-  # APIs
-  def require_worker(job_id)
-    return @job_worker_queues[job_id].pop()
-  end
-
+  # Client APIs
   def submit_jobs(job_list)
     uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @table_mutex.synchronize {
@@ -34,6 +30,11 @@ class Dispatcher
       }
     }
     return uuid_list  # Returning a UUID list stands for acceptance
+  end
+
+  def require_worker(job_id)
+    # TODO: what if queue popped but not used? ====> more communications
+    return @job_worker_queues[job_id].pop()
   end
 
   def job_done(uuid)
@@ -49,6 +50,7 @@ class Dispatcher
     @job_worker_queues.delete(uuid)
   end
 
+  # Worker APIs
   def on_worker_available(worker)
     # TODO: Push into corresponding queue
     StatusChecker.set_status(worker, Worker::STATE[:AVAILABLE])
@@ -64,6 +66,7 @@ class Dispatcher
     end
   end
 
+  # General APIs
   def reschedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
     if @table_mutex.owned?
       @job_worker_table = decision_maker.schedule_jobs(@job_list)
