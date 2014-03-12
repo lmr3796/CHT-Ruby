@@ -9,6 +9,7 @@ class Dispatcher
     def initialize()
       @subscribe_list_mutex = Mutex.new
       @job_list_subscribers = []
+      @merge_mutex = Mutex.new
       super
     end
 
@@ -16,10 +17,10 @@ class Dispatcher
     def subscribe_job_list_change(subscriber)
       @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
     end
-    def publish_job_submitted()
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted}
+    def publish_job_submitted(uuid_list)
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted uuid_list}
     end
-    def publish_job_deleted()
+    def publish_job_deleted(uuid)
       @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted uuid}
     end
 
@@ -27,7 +28,7 @@ class Dispatcher
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
     def []=(uuid, job)
       super
-      publish_job_add
+      publish_job_add [uuid]
     end
 
     def delete(uuid)
@@ -35,9 +36,13 @@ class Dispatcher
       publish_job_deleted uuid
     end
 
-    def merge!(hsh)
-      super
-      publish_job_add
+    def merge!(to_add)
+      uuid_list = nil
+      @read_write_lock.with_write_lock{
+        uuid_list = to_add.keys - @underlying_hash.keys
+        @underlying_hash.merge!(to_add, &block)
+      }
+      publish_job_add uuid_list
     end
 
   end
@@ -66,7 +71,7 @@ class Dispatcher
     end
 
     # Observer call back
-    def on_job_submitted()
+    def on_job_submitted(uuid_list)
       # TODO: implement this...
     end
     def on_job_deleted()
@@ -118,8 +123,8 @@ class Dispatcher
   # General APIs
 
   # Observer callbacks
-  def on_job_submitted()
-    uuid_table.keys.each { |uuid|
+  def on_job_submitted(uuid_list)
+    uuid_list.each { |uuid|
       @job_worker_table[uuid].each { |worker|
         @job_worker_queues[uuid] = Queue.new
       }
