@@ -4,14 +4,62 @@ require 'securerandom'
 require_relative 'decision_maker'
 require_relative 'read_write_lock_hash'
 class Dispatcher
+
+  class JobList < ReadWriteLockHash
+    def initialize()
+      @subscribe_list_mutex = Mutex.new
+      @job_list_subscribers = []
+      super
+    end
+
+    # Observer's pattern
+    def publish_job_list_change()
+      @job_list_subscribers.each {|subscriber| subscriber.on_update_job_list}
+    end
+
+    def subscribe_job_list_change(subscriber)
+      @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
+    end
+
+    # TODO: Hook notifier on writing methods
+    # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
+    def []=(k,v)
+      super
+      publish_job_list_change
+    end
+
+    def delete(k)
+      super
+      publish_job_list_change
+    end
+
+    def merge!(hsh)
+      super
+      publish_job_list_change
+    end
+
+  end
+
+  class ScheduleManager
+    def initialize(job_list)
+      @lock = ReadWriteLock.new
+      @worker_job_table = {}
+      @job_worker_table = {}
+      @job_list = job_list
+    end
+
+    def on_update_job_list()
+      # TODO: implement this...
+    end
+  end
+
   attr_writer :status_checker, :decision_maker
 
   def initialize(arg={})
     raise ArgumentError.new(arg.to_s) if !(arg.keys-[:status_checker, :decision_maker]).empty?
-    @worker_job_table = ReadWriteLockHash.new
-    @job_worker_table = ReadWriteLockHash.new
-    @job_worker_queues = ReadWriteLockHash.new
     @job_list = ReadWriteLockHash.new
+    @schedule_manager = ScheduleManager.new(job_list)
+    @job_worker_queues = ReadWriteLockHash.new
     @resource_mutex = Mutex.new
     @status_checker = arg[:status_checker]
     @decision_maker = arg[:decision_maker]
@@ -22,11 +70,12 @@ class Dispatcher
     uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @resource_mutex.synchronize {
       @job_list.merge! uuid_table
-      schedule_jobs() 
-      uuid_table.keys.each { |uuid|
-        @job_worker_table[uuid].each { |worker|
-          @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
-        }
+      @job_worker_queues[uuid] = Queue.new
+    }
+    # TODO: schedule_jobs()
+    uuid_table.keys.each { |uuid|
+      @job_worker_table[uuid].each { |worker|
+        @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
       }
     }
     return uuid_list  # Returning a UUID list stands for acceptance
@@ -57,7 +106,12 @@ class Dispatcher
     } if @worker_job_table.has_key? worker 
   end
 
+
   # General APIs
+  def on_update_job_list()
+    # TODO: implement this...
+  end
+
   def schedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
     if @resource_mutex.owned?
       @job_worker_table = decision_maker.schedule_jobs(@job_list)
