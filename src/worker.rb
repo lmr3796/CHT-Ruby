@@ -26,5 +26,9 @@ class Worker
     stderr.close
     return result
   end
+
+  def notify_pull_job() # Notified to pull jobs
+  end
+
 end
 
