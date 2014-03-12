@@ -48,6 +48,7 @@ class Dispatcher
       @worker_job_table = {}
       @job_worker_table = {}
       @job_list = job_list
+      @job_list.subscribe_job_list_change(self)
     end
 
     def schedule_job()
@@ -79,6 +80,7 @@ class Dispatcher
   def initialize(arg={})
     raise ArgumentError.new(arg.to_s) if !(arg.keys-[:status_checker, :decision_maker]).empty?
     @job_list = ReadWriteLockHash.new
+    @job_list.subscribe_job_list_change(self)
     @schedule_manager = ScheduleManager.new(job_list)
     @job_worker_queues = ReadWriteLockHash.new
     @resource_mutex = Mutex.new
