@@ -12,7 +12,7 @@ class Dispatcher
     @job_worker_table = ReadWriteLockHash.new
     @job_worker_queues = ReadWriteLockHash.new
     @job_list = ReadWriteLockHash.new
-    @table_mutex = Mutex.new
+    @resource_mutex = Mutex.new
     @status_checker = arg[:status_checker]
     @decision_maker = arg[:decision_maker]
   end
@@ -20,7 +20,7 @@ class Dispatcher
   # Client APIs
   def submit_jobs(job_list)
     uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
-    @table_mutex.synchronize {
+    @resource_mutex.synchronize {
       @job_list.merge! uuid_table
       schedule_jobs() 
       uuid_table.keys.each { |uuid|
@@ -39,7 +39,7 @@ class Dispatcher
 
   def job_done(uuid)
     # TODO: Reschedule jobs
-    @table_mutex.synchronize {
+    @resource_mutex.synchronize {
       @job_list.delete(uuid)
       until @job_worker_queues[uuid].empty? do
         worker = @job_worker_queues[uuid].pop
@@ -51,7 +51,7 @@ class Dispatcher
 
   # Worker APIs
   def on_worker_available(worker)
-    @table_mutex.synchronize {
+    @resource_mutex.synchronize {
       @job_worker_queues[ @worker_job_table[worker] ].push(worker)
       @statusChecker.occupy_worker worker
     } if @worker_job_table.has_key? worker 
@@ -59,7 +59,7 @@ class Dispatcher
 
   # General APIs
   def schedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
-    if @table_mutex.owned?
+    if @resource_mutex.owned?
       @job_worker_table = decision_maker.schedule_jobs(@job_list)
       @worker_job_table = ReadWriteLockHash.new
       @job_worker_table.keys.each { |job_id|
@@ -69,7 +69,7 @@ class Dispatcher
         }
       }
     else
-      @table_mutex.synchronize {
+      @resource_mutex.synchronize {
         @job_worker_table = decision_maker.schedule_jobs(@job_list)
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
