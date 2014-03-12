@@ -20,19 +20,19 @@ class Dispatcher
       @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted}
     end
     def publish_job_deleted()
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted}
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted uuid}
     end
 
     # TODO: Hook notifier on writing methods
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
-    def []=(k,v)
+    def []=(uuid, job)
       super
       publish_job_add
     end
 
-    def delete(k)
+    def delete(uuid)
       super
-      publish_job_deleted
+      publish_job_deleted uuid
     end
 
     def merge!(hsh)
@@ -93,7 +93,6 @@ class Dispatcher
     uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @resource_mutex.synchronize {
       @job_list.merge! uuid_table
-      @job_worker_queues[uuid] = Queue.new
     }
     return uuid_list  # Returning a UUID list stands for acceptance
   end
@@ -122,11 +121,14 @@ class Dispatcher
   def on_job_submitted()
     uuid_table.keys.each { |uuid|
       @job_worker_table[uuid].each { |worker|
-        @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
+        @job_worker_queues[uuid] = Queue.new
       }
     }
   end
-  def on_job_deleted()
+
+  def on_job_deleted(uuid)
+    # Clear the entrie in @job_worker_queues[uuid]
+    # Release nodes first
     @resource_mutex.synchronize {
       until @job_worker_queues[uuid].empty? do
         worker = @job_worker_queues[uuid].pop
