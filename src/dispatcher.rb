@@ -4,16 +4,17 @@ require 'securerandom'
 require_relative 'decision_maker'
 require_relative 'read_write_lock_hash'
 class Dispatcher
-  attr_accessor :status_checker, :decision_maker
+  attr_writer :status_checker, :decision_maker
 
-  def initialize()
+  def initialize(arg={})
+    raise ArgumentError.new(arg.to_s) if !(arg.keys-[:status_checker, :decision_maker]).empty?
     @worker_job_table = ReadWriteLockHash.new
     @job_worker_table = ReadWriteLockHash.new
     @job_worker_queues = ReadWriteLockHash.new
     @job_list = ReadWriteLockHash.new
     @table_mutex = Mutex.new
-    #TODO: new StatusChecker
-    #TODO: new DecisionMaker
+    @status_checker = arg[:status_checker]
+    @decision_maker = arg[:decision_maker]
   end
 
   # APIs
