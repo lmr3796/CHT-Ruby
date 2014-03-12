@@ -38,32 +38,23 @@ class Dispatcher
   end
 
   def job_done(uuid)
-    # TODO: Remove entries and queues
     # TODO: Reschedule jobs
     @table_mutex.synchronize {
       @job_list.delete(uuid)
-      reschedule_jobs()
       until @job_worker_queues[uuid].empty? do
-        on_worker_available(@job_worker_queues[uuid].pop)
+        worker = @job_worker_queues[uuid].pop
+        @status_checker.release worker
       end
+      @job_worker_queues.delete(uuid)
     }
-    @job_worker_queues.delete(uuid)
   end
 
   # Worker APIs
   def on_worker_available(worker)
-    # TODO: Push into corresponding queue
-    StatusChecker.set_status(worker, Worker::STATE[:AVAILABLE])
-    return if !@worker_job_table.has_key? worker  # Not assigned
-    if @table_mutex.owned?
+    @table_mutex.synchronize {
       @job_worker_queues[ @worker_job_table[worker] ].push(worker)
-      StatusChecker.set_status(worker, Worker::STATE[:OCCUPIED])
-    else
-      @table_mutex.synchronize {
-        @job_worker_queues[ @worker_job_table[worker] ].push(worker)
-        StatusChecker.set_status(worker, Worker::STATE[:OCCUPIED])
-      }
-    end
+      @statusChecker.occupy_worker worker
+    } unless @worker_job_table.has_key? worker 
   end
 
   # General APIs
