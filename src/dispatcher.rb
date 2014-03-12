@@ -79,12 +79,6 @@ class Dispatcher
       @job_list.merge! uuid_table
       @job_worker_queues[uuid] = Queue.new
     }
-    # TODO: schedule_jobs()
-    uuid_table.keys.each { |uuid|
-      @job_worker_table[uuid].each { |worker|
-        @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
-      }
-    }
     return uuid_list  # Returning a UUID list stands for acceptance
   end
 
@@ -94,15 +88,7 @@ class Dispatcher
   end
 
   def job_done(uuid)
-    # TODO: Reschedule jobs
-    @resource_mutex.synchronize {
-      @job_list.delete(uuid)
-      until @job_worker_queues[uuid].empty? do
-        worker = @job_worker_queues[uuid].pop
-        @status_checker.release worker
-      end
-      @job_worker_queues.delete(uuid)
-    }
+    @job_list.delete(uuid)
   end
 
   # Worker APIs
@@ -118,8 +104,20 @@ class Dispatcher
 
   # Observer callbacks
   def on_job_submitted()
+    uuid_table.keys.each { |uuid|
+      @job_worker_table[uuid].each { |worker|
+        @job_worker_queues[uuid].push worker if @status_checker.get_status(worker) == StatusChecker::AVAILABLE
+      }
+    }
   end
   def on_job_deleted()
+    @resource_mutex.synchronize {
+      until @job_worker_queues[uuid].empty? do
+        worker = @job_worker_queues[uuid].pop
+        @status_checker.release worker
+      end
+      @job_worker_queues.delete(uuid)
+    }
   end
 
   def schedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
