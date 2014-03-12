@@ -13,29 +13,31 @@ class Dispatcher
     end
 
     # Observer's pattern
-    def publish_job_list_change()
-      @job_list_subscribers.each {|subscriber| subscriber.on_update_job_list}
-    end
-
     def subscribe_job_list_change(subscriber)
       @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
+    end
+    def publish_job_submitted()
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted}
+    end
+    def publish_job_deleted()
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted}
     end
 
     # TODO: Hook notifier on writing methods
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
     def []=(k,v)
       super
-      publish_job_list_change
+      publish_job_add
     end
 
     def delete(k)
       super
-      publish_job_list_change
+      publish_job_deleted
     end
 
     def merge!(hsh)
       super
-      publish_job_list_change
+      publish_job_add
     end
 
   end
@@ -48,9 +50,14 @@ class Dispatcher
       @job_list = job_list
     end
 
-    def on_update_job_list()
+    # Observer call back
+    def on_job_submitted()
       # TODO: implement this...
     end
+    def on_job_deleted()
+      # TODO: implement this...
+    end
+
   end
 
   attr_writer :status_checker, :decision_maker
@@ -108,8 +115,11 @@ class Dispatcher
 
 
   # General APIs
-  def on_update_job_list()
-    # TODO: implement this...
+
+  # Observer callbacks
+  def on_job_submitted()
+  end
+  def on_job_deleted()
   end
 
   def schedule_jobs()   # TODO: If this take too long have to make it an asynchronous call
