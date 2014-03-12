@@ -3,7 +3,7 @@ CHT-Ruby
 procedure of a job
 1. Client submits job to dispatcher.
 2. The dispatcher returns the id of the job.
-3. Clients ask dispatcher for a worker
+3. Client asks dispatcher for a worker
 4. The dispatcher returns the id of a worker.
    The thread would be blocked in dispatcher until a worker is found.
 5. Client spawns a thread to send the request to the worker.
