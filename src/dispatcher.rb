@@ -17,32 +17,32 @@ class Dispatcher
     def subscribe_job_list_change(subscriber)
       @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
     end
-    def publish_job_submitted(uuid_list)
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted uuid_list}
+    def publish_job_submitted(job_id_list)
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
     end
-    def publish_job_deleted(uuid)
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted uuid}
+    def publish_job_deleted(job_id)
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
     end
 
     # TODO: Hook notifier on writing methods
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
-    def []=(uuid, job)
+    def []=(job_id, job)
       super
-      publish_job_add [uuid]
+      publish_job_add [job_id]
     end
 
-    def delete(uuid)
+    def delete(job_id)
       super
-      publish_job_deleted uuid
+      publish_job_deleted job_id
     end
 
     def merge!(to_add)
-      uuid_list = nil
+      job_id_list = nil
       @read_write_lock.with_write_lock{
-        uuid_list = to_add.keys - @underlying_hash.keys
+        job_id_list = to_add.keys - @underlying_hash.keys
         @underlying_hash.merge!(to_add, &block)
       }
-      publish_job_add uuid_list
+      publish_job_add job_id_list
     end
 
   end
@@ -71,7 +71,7 @@ class Dispatcher
     end
 
     # Observer call back
-    def on_job_submitted(uuid_list)
+    def on_job_submitted(job_id_list)
       # TODO: implement this...
     end
     def on_job_deleted()
@@ -95,11 +95,11 @@ class Dispatcher
 
   # Client APIs
   def submit_jobs(job_list)
-    uuid_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
+    job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @resource_mutex.synchronize {
-      @job_list.merge! uuid_table
+      @job_list.merge! job_id_table
     }
-    return uuid_list  # Returning a UUID list stands for acceptance
+    return job_id_list  # Returning a UUID list stands for acceptance
   end
 
   def require_worker(job_id)
@@ -107,8 +107,8 @@ class Dispatcher
     return @job_worker_queues[job_id].pop()
   end
 
-  def job_done(uuid)
-    @job_list.delete(uuid)
+  def job_done(job_id)
+    @job_list.delete(job_id)
   end
 
   # Worker APIs
@@ -123,23 +123,23 @@ class Dispatcher
   # General APIs
 
   # Observer callbacks
-  def on_job_submitted(uuid_list)
-    uuid_list.each { |uuid|
-      @job_worker_table[uuid].each { |worker|
-        @job_worker_queues[uuid] = Queue.new
+  def on_job_submitted(job_id_list)
+    job_id_list.each { |job_id|
+      @job_worker_table[job_id].each { |worker|
+        @job_worker_queues[job_id] = Queue.new
       }
     }
   end
 
-  def on_job_deleted(uuid)
-    # Clear the entrie in @job_worker_queues[uuid]
+  def on_job_deleted(job_id)
+    # Clear the entrie in @job_worker_queues[job_id]
     # Release nodes first
     @resource_mutex.synchronize {
-      until @job_worker_queues[uuid].empty? do
-        worker = @job_worker_queues[uuid].pop
+      until @job_worker_queues[job_id].empty? do
+        worker = @job_worker_queues[job_id].pop
         @status_checker.release worker
       end
-      @job_worker_queues.delete(uuid)
+      @job_worker_queues.delete(job_id)
     }
   end
 
