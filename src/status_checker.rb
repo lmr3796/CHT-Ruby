@@ -4,7 +4,9 @@ require_relative 'common/read_write_lock_hash'
 require_relative 'worker'
 
 class StatusChecker
-  @worker_status_table = ReadWriteLockHash.new
+  def initialize(worker_status_table={})
+    @worker_status_table = ReadWriteLockHash.new worker_status_table
+  end
   def release_worker(worker)
     @worker_status_table[worker] = Worker::STATE[:AVAILABLE]
   end

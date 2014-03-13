@@ -2,8 +2,8 @@ require_relative 'read_write_lock'
 
 class ReadWriteLockHash
 
-  def initialize()
-    @underlying_hash = {}
+  def initialize(arg={})
+    @underlying_hash = @arg
     @read_write_lock = ReadWriteLock.new
   end
 
