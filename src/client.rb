@@ -2,7 +2,6 @@ require 'drb'
 require 'thread'
 require 'sync'
 
-require_relative '../config/config'
 require_relative 'job'
 require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
@@ -12,10 +11,9 @@ class Client
 
   THREAD_POOL_SIZE = 32
 
-  def initialize()
+  def initialize(dispatcher)
     DRb.start_service
-    @dispatcher = DRbObject.new_with_uri CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
-
+    @dispatcher = dispatcher
     @submitted_jobs = ReadWriteLockHash.new
     @thread_pool = ThreadPool.new(THREAD_POOL_SIZE)
   end
