@@ -1,6 +1,6 @@
 require 'drb'
 
-require_relative 'read_write_lock_hash'
+require_relative 'common/read_write_lock_hash'
 require_relative 'worker'
 
 class StatusChecker

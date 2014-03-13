@@ -4,8 +4,8 @@ require 'sync'
 
 require_relative '../config/config'
 require_relative 'job'
-require_relative 'read_write_lock_hash'
-require_relative 'thread_pool'
+require_relative 'common/read_write_lock_hash'
+require_relative 'common/thread_pool'
 
 
 class Client

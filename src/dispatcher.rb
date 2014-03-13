@@ -2,7 +2,7 @@ require 'thread'
 require 'securerandom'
 
 require_relative 'decision_maker'
-require_relative 'read_write_lock_hash'
+require_relative 'common/read_write_lock_hash'
 class Dispatcher
 
   class JobList < ReadWriteLockHash
