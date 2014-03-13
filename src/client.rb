@@ -9,13 +9,13 @@ require_relative 'common/thread_pool'
 
 class Client
 
-  THREAD_POOL_SIZE = 32
+  DEFAULT_THREAD_POOL_SIZE = 32
 
-  def initialize(dispatcher)
+  def initialize(dispatcher, thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
     DRb.start_service
     @dispatcher = dispatcher
     @submitted_jobs = ReadWriteLockHash.new
-    @thread_pool = ThreadPool.new(THREAD_POOL_SIZE)
+    @thread_pool = ThreadPool.new(thread_pool_size)
   end
 
   def start(jobs)
