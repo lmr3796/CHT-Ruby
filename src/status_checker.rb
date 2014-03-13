@@ -8,16 +8,16 @@ class StatusChecker
     @worker_status_table = ReadWriteLockHash.new worker_status_table
   end
   def release_worker(worker)
-    @worker_status_table[worker] = Worker::STATE[:AVAILABLE]
+    @worker_status_table[worker] = Worker::STATE::AVAILABLE
   end
   def occupy_worker(worker)
-    @worker_status_table[worker] = Worker::STATE[:OCCUPIED]
+    @worker_status_table[worker] = Worker::STATE::OCCUPIED
   end
   def worker_running(worker)
-    @worker_status_table[worker] = Worker::STATE[:BUSY]
+    @worker_status_table[worker] = Worker::STATE::BUSY
   end
-  def add_worker(worker, state=Worker::STATE[:AVAILABLE])
-    raise ArgumentError.new('Invalid state') if !Worker::STATE.has_value? state
+  def add_worker(worker, state=Worker::STATE::UNKNOWN)
+    raise ArgumentError.new('Invalid state') if Worker::STATE.constants.has_value? state
     raise ArgumentError.new('Worker exists') if @worker_status_table.include? worker
     @worker_status_table[worker] = state
   end

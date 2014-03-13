@@ -5,11 +5,14 @@ require_relative 'job.rb'
 class Worker
   attr_reader :name
 
-  STATE={
-    :OCCUPIED => :OCCUPIED,
-    :AVAILABLE => :AVAILABLE,
-    :BUSY => :BUSY,
-  }
+
+  module STATE
+    DOWN       = :DOWN,
+    UNKNOWN    = :UNKNOWN,
+    OCCUPIED   = :OCCUPIED,
+    AVAILABLE  = :AVAILABLE,
+    BUSY       = :BUSY,
+  end
 
   def initialize(name)
     @name = name
