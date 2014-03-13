@@ -1,10 +1,11 @@
 require 'open3'
 require 'thread'
+require 'securerandom'
 
 require_relative 'job.rb'
 
 class Worker
-  attr_reader :name, :state
+  attr_reader :name, :state, :id
   attr_writer :status_checker
 
 
@@ -17,6 +18,7 @@ class Worker
   end
 
   def initialize(name)
+    @id = SecureRandom::uuid()
     @name = name
     @lock = Mutex.new
     @state = STATE::AVAILABLE
@@ -26,10 +28,10 @@ class Worker
     raise 'Not a proper task to run' if !task.is_a? Task
     @lock.synchronize{  # Worker is dedicated
       @state = STATE::BUSY
-      @status_worker.worker_running @name
+      @status_worker.worker_running @id
       res = run_cmd(task.cmd, task.args)
       @state = STATE::AVAILABLE
-      @status_worker.release_worker @name
+      @status_worker.release_worker @id
     }
     return res
   end

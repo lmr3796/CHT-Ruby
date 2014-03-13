@@ -4,8 +4,10 @@ require_relative 'common/read_write_lock_hash'
 require_relative 'worker'
 
 class StatusChecker
-  def initialize(worker_status_table={})
-    @worker_status_table = ReadWriteLockHash.new worker_status_table
+  def initialize(worker_table={})
+    # TODO: make up a worker table
+    @worker_table = Hash.new worker_table
+    @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATE::UNKNOWN]}]
   end
   def release_worker(worker)
     @worker_status_table[worker] = Worker::STATE::AVAILABLE
@@ -16,9 +18,8 @@ class StatusChecker
   def worker_running(worker)
     @worker_status_table[worker] = Worker::STATE::BUSY
   end
-  def add_worker(worker, state=Worker::STATE::UNKNOWN)
-    raise ArgumentError.new('Invalid state') if Worker::STATE.constants.has_value? state
-    raise ArgumentError.new('Worker exists') if @worker_status_table.include? worker
-    @worker_status_table[worker] = state
+  def collect_state(worker=nil)
+    # TODO: collect state of all/specified worker
   end
+  # TODO: worker registration at runtime?
 end
