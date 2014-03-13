@@ -1,9 +1,11 @@
 require 'open3'
+require 'thread'
 
 require_relative 'job.rb'
 
 class Worker
-  attr_reader :name
+  attr_reader :name, :state
+  attr_writer :status_checker
 
 
   module STATE
@@ -16,11 +18,20 @@ class Worker
 
   def initialize(name)
     @name = name
+    @lock = Mutex.new
+    @state = STATE::AVAILABLE
   end
 
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
-    return run_cmd(task.cmd, task.args)
+    @lock.synchronize{  # Worker is dedicated
+      @state = STATE::BUSY
+      @status_worker.worker_running @name
+      res = run_cmd(task.cmd, task.args)
+      @state = STATE::AVAILABLE
+      @status_worker.release_worker @name
+    }
+    return res
   end
 
   def run_cmd(command, *args)
@@ -35,9 +46,6 @@ class Worker
     stdout.close
     stderr.close
     return result
-  end
-
-  def notify_pull_job() # Notified to pull jobs
   end
 
 end
