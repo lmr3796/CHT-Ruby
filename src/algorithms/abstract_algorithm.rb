@@ -5,6 +5,7 @@ module SchedulingAlgorithm
     end
     def schedule_job(job_list, worker_status)
       raise NotImplementedError
+      #return {job_id => [worker1, worker2...]}
     end
   end
 end

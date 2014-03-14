@@ -59,9 +59,10 @@ class Dispatcher
     def schedule_job()
       @lock.with_write_lock {
         # TODO: coordinate output from decision maker
-        @job_worker_table = decision_maker.schedule_job(@job_list)
+        @job_worker_table = decision_maker.schedule_job(@job_list)  # {job_id => [worker1, worker2...]}
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
+          # TODO: maybe only update the table with those changed
           workers = @job_worker_table[job_id]
           workers.each { |worker|
             @worker_job_table[worker] = job_id
@@ -73,9 +74,11 @@ class Dispatcher
     # Observer call back
     def on_job_submitted(job_id_list)
       # TODO: implement this...
+      raise NotImplementedError
     end
     def on_job_deleted()
       # TODO: implement this...
+      raise NotImplementedError
     end
 
   end

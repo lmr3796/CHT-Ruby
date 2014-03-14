@@ -20,6 +20,7 @@ class StatusChecker
   end
   def collect_state(worker=nil)
     # TODO: collect state of all/specified worker
+    raise NotImplementedError
   end
   # TODO: worker registration at runtime?
 end
