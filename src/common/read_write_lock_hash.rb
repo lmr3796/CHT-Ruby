@@ -3,7 +3,7 @@ require_relative 'read_write_lock'
 class ReadWriteLockHash
 
   def initialize(arg={})
-    @underlying_hash = arg
+    @underlying_hash = arg.clone
     @read_write_lock = ReadWriteLock.new
   end
 

@@ -6,7 +6,7 @@ require_relative 'worker'
 class StatusChecker
   def initialize(worker_table={})
     # TODO: make up a worker table
-    @worker_table = Hash.new worker_table
+    @worker_table = worker_table.clone
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATE::UNKNOWN]}]
   end
   def release_worker(worker)
