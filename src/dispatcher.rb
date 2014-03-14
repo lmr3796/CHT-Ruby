@@ -59,7 +59,7 @@ class Dispatcher
     def schedule_job()
       @lock.with_write_lock {
         # TODO: coordinate output from decision maker
-        @job_worker_table = decision_maker.schedule_jobs(@job_list)
+        @job_worker_table = decision_maker.schedule_job(@job_list)
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
           workers = @job_worker_table[job_id]
@@ -141,6 +141,11 @@ class Dispatcher
       end
       @job_worker_queues.delete(job_id)
     }
+  end
+
+  def worker_status()
+    # TODO: implement this
+    raise NotImplementedError
   end
 
 end
