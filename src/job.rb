@@ -1,10 +1,12 @@
 
 class Job
-  attr_accessor :priority, :deadline
-  def initialize(priority, deadline)
+  attr_accessor :priority, :deadline, :worker_running_time_table
+  def initialize(priority, deadline, worker_running_time_table)
     @task = []
+    # Priority represented by smaller number is of higher priority
     @priority = priority
     @deadline = deadline
+    @worker_running_time_table = worker_running_time_table
   end
 
   def add_task(t)
