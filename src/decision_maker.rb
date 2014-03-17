@@ -4,8 +4,8 @@ class DecisionMaker
     @algorithm = alg
     @status_checker = status_checker
   end
-  def schedule_job(job_list, worker_status, arg={})
+  def schedule_job(job_list, worker_status, current_schedule, arg={})
     # Possibly something to be done with arg in the future :)
-    return @algortihm.schedule_job job_list, worker_status
+    return @algortihm.schedule_job job_list, worker_status, current_schedule
   end
 end
