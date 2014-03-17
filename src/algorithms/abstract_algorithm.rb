@@ -2,7 +2,7 @@ module SchedulingAlgorithm
   USABLE_WORKER_STATUS = [
     Worker::STATUS::OCCUPIED,
     Worker::STATUS::AVAILABLE,
-    Worker::STATUS::BUSY
+    Worker::STATUS::BUSY,
   ]
   class AbstractAlgorithm
     def initialize()
