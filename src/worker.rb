@@ -26,6 +26,7 @@ class Worker
 
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
+    res = nil
     @lock.synchronize{  # Worker is dedicated
       @state = STATE::BUSY
       @status_worker.worker_running @id
