@@ -1,7 +1,7 @@
 require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
-  class DeadlineBasedScheduling
+  class PriorityBasedScheduling
     def initialize()
     end
     def schedule_job(job_list, worker_status, current_schedule)
@@ -13,12 +13,12 @@ module SchedulingAlgorithm
       # Priority represented by smaller number is of higher priority.
       sorted_job_id = job_list.keys.sort{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
-      schedule_resule = {}
+      schedule_result = {}
       sorted_job_id.each{ |job_id|
         job = job_list[job_id]
         best_worker_index = nil
         best_running_time = nil
-        remaining_worker.each_with_index{ |index, worker_id|
+        remaining_worker.each_with_index{ |worker_id, index|
           if best_worker_index == nil || best_running_time > job.task_running_time_on_worker[worker_id]
             best_worker_index = index
             best_running_time = job.task_running_time_on_worker[worker_id]
