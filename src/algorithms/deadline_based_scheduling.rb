@@ -32,7 +32,7 @@ module SchedulingAlgorithm
         break if total_throughput > required_throughput
         break if needed_worker == job.task.size
         needed_worker += 1
-        total_throughput += 1 / job.task_running_time_on_worker[worker_id]
+        total_throughput += 1.0 / job.task_running_time_on_worker[worker_id]
       }
       return 0, needed_worker
     end
