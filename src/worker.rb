@@ -5,32 +5,33 @@ require 'securerandom'
 require_relative 'job.rb'
 
 class Worker
-  attr_reader :name, :state, :id
+  attr_reader :name, :status, :id
   attr_writer :status_checker
 
 
-  module STATE
-    DOWN       = :DOWN,
-    UNKNOWN    = :UNKNOWN,
-    OCCUPIED   = :OCCUPIED,
-    AVAILABLE  = :AVAILABLE,
-    BUSY       = :BUSY,
+  module STATUS
+    DOWN       = :DOWN
+    UNKNOWN    = :UNKNOWN
+    OCCUPIED   = :OCCUPIED
+    AVAILABLE  = :AVAILABLE
+    BUSY       = :BUSY
   end
 
   def initialize(name)
     @id = SecureRandom::uuid()
     @name = name
     @lock = Mutex.new
-    @state = STATE::AVAILABLE
+    @status = STATUS::AVAILABLE
   end
 
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
+    res = nil
     @lock.synchronize{  # Worker is dedicated
-      @state = STATE::BUSY
+      @status = STATUS::BUSY
       @status_worker.worker_running @id
       res = run_cmd(task.cmd, task.args)
-      @state = STATE::AVAILABLE
+      @status = STATUS::AVAILABLE
       @status_worker.release_worker @id
     }
     return res
