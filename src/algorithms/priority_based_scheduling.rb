@@ -16,6 +16,7 @@ module SchedulingAlgorithm
       schedule_result = {}
       # Assign a worker for each job
       sorted_job_id.each{ |job_id|
+        break if remaining_worker.empty?
         job = job_list[job_id]
         best_worker_index = (0...remaining_worker.size).min_by{ |index| job.task_running_time_on_worker[remaining_worker[index]] }
         schedule_result[job_id] = [remaining_worker[best_worker_index]]

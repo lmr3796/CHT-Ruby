@@ -15,6 +15,7 @@ module SchedulingAlgorithm
       remaining_worker = worker_status.keys
       schedule_result = {}
       sorted_job_id.each{ |job_id|
+        break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remainging_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id]}
         assigned_worker_offset, assigned_worker_size = get_required_worker_range(job, worker_by_throughput)
