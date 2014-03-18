@@ -11,23 +11,19 @@ module SchedulingAlgorithm
       # Return: {job_id => [worker_id, ...]}
       # Concept: 
       # Priority represented by smaller number is of higher priority.
-      sorted_job_id = job_list.keys.sort{ |job_id| job_list[job_id].priority }
+      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
       schedule_result = {}
-      sorted_job_id.each{ |job_id|
+      # Assign a worker for each job
+      job_id_by_priority.each{ |job_id|
+        break if remaining_worker.empty?
         job = job_list[job_id]
-        best_worker_index = nil
-        best_running_time = nil
-        remaining_worker.each_with_index{ |worker_id, index|
-          if best_worker_index == nil || best_running_time > job.task_running_time_on_worker[worker_id]
-            best_worker_index = index
-            best_running_time = job.task_running_time_on_worker[worker_id]
-          end
-        }
+        best_worker_index = (0...remaining_worker.size).min_by{ |index| job.task_running_time_on_worker[remaining_worker[index]] }
         schedule_result[job_id] = [remaining_worker[best_worker_index]]
         remaining_worker.delete_at(best_worker_index)
       }
-      sorted_job_id.each{ |job_id|
+      # Assign as more worker as we can for job with high priority
+      job_id_by_priority.each{ |job_id|
         break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id] }
