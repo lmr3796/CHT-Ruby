@@ -14,6 +14,7 @@ module SchedulingAlgorithm
       sorted_job_id = job_list.keys.sort{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
       schedule_result = {}
+      # Assign a worker for each job
       sorted_job_id.each{ |job_id|
         job = job_list[job_id]
         best_worker_index = nil
@@ -27,6 +28,7 @@ module SchedulingAlgorithm
         schedule_result[job_id] = [remaining_worker[best_worker_index]]
         remaining_worker.delete_at(best_worker_index)
       }
+      # Assign as more worker as we can for job with high priority
       sorted_job_id.each{ |job_id|
         break if remaining_worker.empty?
         job = job_list[job_id]

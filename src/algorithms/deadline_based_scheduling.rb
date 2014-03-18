@@ -25,6 +25,7 @@ module SchedulingAlgorithm
     end
 
     def get_required_worker_range(job, worker_by_throughput)
+      # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
       required_throughput = job.task.size * 1.0 / job.deadline
