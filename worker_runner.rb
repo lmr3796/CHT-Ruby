@@ -28,7 +28,7 @@ OptionParser.new do |opts|
 
 end.parse!
 
-options[:port] ||= ARGV.shift.to_i or CHT_Configuration::Address::WORKER_DEFAULT_PORT
+options[:port] ||= (ARGV.shift or CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
 options[:name] ||= ARGV.shift or `hostname` or SecureRandom.uuid
 
 if !ARGV.empty?
@@ -38,7 +38,7 @@ end
 
 # Initiate and run the worker as a DRb object
 worker = Worker.new options[:name]
-druby_uri = CHT_Configuration::Address.druby_uri({:address => '', :port => options[:port]})
+druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, worker
 $stderr.puts "Running on #{druby_uri}..."
 DRb.thread.join

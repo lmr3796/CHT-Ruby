@@ -1,0 +1,5 @@
+#! /usr/bin/env bash
+
+ruby daemon-wrapper.rb './dispatcher_runner.rb' "$@"
+
+
