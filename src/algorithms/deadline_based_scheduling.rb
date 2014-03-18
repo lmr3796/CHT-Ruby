@@ -11,10 +11,10 @@ module SchedulingAlgorithm
       # Return: {job_id => [worker_id, ...]}
       # Concept: make jobs with higher priority meet their deadlines
       # Priority represented by smaller number is of higher priority.
-      sorted_job_id = job_list.keys.sort{ |job_id| job_list[job_id].priority }
+      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
       schedule_result = {}
-      sorted_job_id.each{ |job_id|
+      job_id_by_priority.each{ |job_id|
         break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remainging_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id]}
