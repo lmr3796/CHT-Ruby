@@ -2,8 +2,10 @@ require 'thread'
 require 'securerandom'
 
 require_relative 'decision_maker'
+require_relative 'server_monitor'
 require_relative 'common/read_write_lock_hash'
 class Dispatcher
+  include ServerStatusChecking
 
   class JobList < ReadWriteLockHash
     def initialize()

@@ -1,4 +1,6 @@
+require_relative 'server_monitor'
 class DecisionMaker
+  include ServerStatusChecking
   attr_writer :status_checker, :algorithm
   def initialize(alg, status_checker=nil)
     @algorithm = alg
