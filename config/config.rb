@@ -16,9 +16,9 @@ module CHT_Configuration
       DECISION_MAKER_DEFAULT_PORT  = 10003
     end
 
-    DISPATCHER      = {:address => '192.168.10.112', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
-    STATUS_CHECKER  = {:address => '192.168.10.112', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
-    DECISION_MAKER  = {:address => '192.168.10.112', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
+    DISPATCHER      = {:address => '127.0.0.1', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
+    STATUS_CHECKER  = {:address => '127.0.0.1', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
+    DECISION_MAKER  = {:address => '127.0.0.1', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
 
     WORKERS = {
       'lmr3796-124-2' => {:address => '192.168.10.243', :port => DefaultPorts::WORKER_DEFAULT_PORT},
