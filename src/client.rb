@@ -14,11 +14,11 @@ class Client
 
   DEFAULT_THREAD_POOL_SIZE = 32
 
-  def initialize(dispatcher, thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
+  def initialize(dispatcher_uri, thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
     DRb.start_service
-    @dispatcher = dispatcher
     @submitted_jobs = ReadWriteLockHash.new
     @thread_pool = ThreadPool.new(thread_pool_size)
+    @dispatcher = DRbObject.new_with_uri dispatcher_uri
   end
 
   def start(jobs)
