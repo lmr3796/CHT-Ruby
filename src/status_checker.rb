@@ -1,9 +1,11 @@
 require 'drb'
 
-require_relative 'common/read_write_lock_hash'
+require_relative 'server_monitor'
 require_relative 'worker'
+require_relative 'common/read_write_lock_hash'
 
 class StatusChecker
+  include ServerStatusChecking
   def initialize(worker_table={})
     # TODO: make up a worker table
     @worker_table = worker_table.clone

@@ -2,8 +2,10 @@ require 'thread'
 require 'securerandom'
 
 require_relative 'decision_maker'
+require_relative 'server_monitor'
 require_relative 'common/read_write_lock_hash'
 class Dispatcher
+  include ServerStatusChecking
 
   class JobList < ReadWriteLockHash
     def initialize()
@@ -87,9 +89,9 @@ class Dispatcher
 
   def initialize(arg={})
     raise ArgumentError.new(arg.to_s) if !(arg.keys-[:status_checker, :decision_maker]).empty?
-    @job_list = ReadWriteLockHash.new
+    @job_list = JobList.new
     @job_list.subscribe_job_list_change(self)
-    @schedule_manager = ScheduleManager.new(job_list)
+    @schedule_manager = ScheduleManager.new(@job_list)
     @job_worker_queues = ReadWriteLockHash.new
     @resource_mutex = Mutex.new
     @status_checker = arg[:status_checker]

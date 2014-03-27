@@ -1,3 +1,4 @@
+require_relative '../worker'
 module SchedulingAlgorithm
   USABLE_WORKER_STATUS = [
     Worker::STATUS::OCCUPIED,
