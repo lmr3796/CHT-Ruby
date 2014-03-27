@@ -18,51 +18,69 @@ class Client
     @thread_pool = ThreadPool.new(thread_pool_size)
   end
 
-  def start(jobs)
-    uuid_list = send_jobs(jobs)
-    #For each job, create a thread in thread pool to run the tasks
-    uuid_list.each{ |uuid|
+  def start(jobs, args = {})
+    job_id_list = send_jobs(jobs)
+    thread_id_list = job_id_list.map{ |job_id|
       @thread_pool.schedule{
-        run_job(uuid)
+        run_job(job_id)
       }
     }
+    if args[:BLOCKING]
+      thread_id_list.each{ |thread_id|
+        wait(thread_id)
+      }
+    else
+      return thread_id_list
+    end
   end
 
-  def run_job(uuid)
-    task_queue = @submitted_jobs[uuid]
+  def wait(thread_id)
+    @thread_pool.join(thread_id)
+  end
+  private :wait_job
+
+  def run_job(job_id)
+    task_queue = @submitted_jobs[job_id]
+    thread_id_list = []
     until task_queue.empty? do
       task = task_queue.pop
-      worker = @dispatcher.require_worker(uuid)
-      @thread_pool.schedule{
-        run_task_on_worker(task, uuid, worker)
+      worker = @dispatcher.require_worker(job_id)
+      thread_id_list << @thread_pool.schedule{
+        #TODO: Task execution failure???
+        run_task_on_worker(task, job_id, worker)
       }
     end
-    #TODO: Task execution failure???
-    @dispatcher.job_done(uuid)
+    thread_id_list.each{ |thread_id|
+      @thread_pool.join(thread_id)
+    }
+    @dispatcher.job_done(job_id)
   end
+  private :run_job
 
   def send_jobs(jobs)
     # Convert to a job list if a single job passed
     jobs = [jobs] unless jobs.is_a? Array
     jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a(Job)}
-    uuid_list = @dispatcher.submit_jobs(jobs)
-    raise 'Submission failed' if !uuid_list or !uuid_list.is_a? Array
+    job_id_list = @dispatcher.submit_jobs(jobs)
+    raise 'Submission failed' if !job_id_list or !job_id_list.is_a? Array
 
-    # Build a task queue for each job, indexed with uuid returned from dispatcher
-    uuid_list.each_with_index{|uuid, index|
+    # Build a task queue for each job, indexed with job_id returned from dispatcher
+    job_id_list.each_with_index{|job_id, index|
       task_queue = Queue.new
-      jobs[index].each {|x| task_queue.push x}
-      @task_count[uuid] = jobs[index].size
-      @submitted_jobs[uuid] = task_queue
+      tasks = jobs[index].task
+      tasks.each {|x| task_queue.push x}
+      @task_count[job_id] = tasks.size
+      @submitted_jobs[job_id] = task_queue
     }
-    return uuid_list
+    return job_id_list
   end
+  private :send_jobs
 
-  def run_task_on_worker(task, uuid, worker)
+  def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
     worker = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::WORKER[worker])
-    worker.run_task(task, uuid)
+    worker.run_task(task, job_id)
   end
+  private :run_task_on_worker
 
-  private :run_job, :send_jobs, :run_task_on_worker
 end
