@@ -21,26 +21,20 @@ class Client
     @dispatcher = DRbObject.new_with_uri dispatcher_uri
   end
 
-  def start(jobs, args = {})
+  def start(jobs, args={:blocking => false})
     job_id_list = send_jobs(jobs)
     thread_id_list = job_id_list.map{ |job_id|
       @thread_pool.schedule{
         run_job(job_id)
       }
     }
-    if args[:BLOCKING]
-      thread_id_list.each{ |thread_id|
-        wait(thread_id)
-      }
-    else
-      return thread_id_list
-    end
+    return thread_id_list unless args[:blocking]
+    thread_id_list.each{ |thread_id| wait(thread_id)}
   end
 
   def wait(thread_id)
     @thread_pool.join(thread_id)
   end
-  private :wait_job
 
   def run_job(job_id)
     task_queue = @submitted_jobs[job_id]
