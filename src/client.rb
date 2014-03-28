@@ -25,13 +25,17 @@ class Client
 
   def start(blocking=false)
     job_id_list = send_jobs(@jobs)
-    thread_id_list = job_id_list.map{ |job_id|
+    @thread_id_list = job_id_list.map{ |job_id|
       @thread_pool.schedule{
         run_job(job_id)
       }
     }
-    return thread_id_list unless blocking
-    thread_id_list.each{ |thread_id| wait(thread_id)}
+    return @thread_id_list unless blocking
+    wait_all
+  end
+
+  def wait_all()
+    @thread_id_list.each{ |thread_id| wait(thread_id)}
   end
 
   def wait(thread_id)
