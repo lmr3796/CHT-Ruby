@@ -10,37 +10,37 @@ require_relative 'common/thread_pool'
 
 class Client
   include ServerStatusChecking
+  attr_accessor :jobs
 
 
   DEFAULT_THREAD_POOL_SIZE = 32
 
-  def initialize(dispatcher_uri, thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
+  def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
     DRb.start_service
     @submitted_jobs = ReadWriteLockHash.new
     @thread_pool = ThreadPool.new(thread_pool_size)
     @dispatcher = DRbObject.new_with_uri dispatcher_uri
+    @jobs = jobs
   end
 
-  def start(jobs, args = {})
-    job_id_list = send_jobs(jobs)
-    thread_id_list = job_id_list.map{ |job_id|
+  def start(blocking=false)
+    job_id_list = send_jobs(@jobs)
+    @thread_id_list = job_id_list.map{ |job_id|
       @thread_pool.schedule{
         run_job(job_id)
       }
     }
-    if args[:BLOCKING]
-      thread_id_list.each{ |thread_id|
-        wait(thread_id)
-      }
-    else
-      return thread_id_list
-    end
+    return @thread_id_list unless blocking
+    wait_all
+  end
+
+  def wait_all()
+    @thread_id_list.each{ |thread_id| wait(thread_id)}
   end
 
   def wait(thread_id)
     @thread_pool.join(thread_id)
   end
-  private :wait_job
 
   def run_job(job_id)
     task_queue = @submitted_jobs[job_id]
