@@ -80,11 +80,10 @@ class Dispatcher < BaseServer
     module JobListChangeObserver
       # Observer call back
       def on_job_submitted(job_id_list)
-        # TODO: implement this...
+        schedule_job
       end
       def on_job_deleted()
-        # TODO: implement this...
-        raise NotImplementedError
+        schedule_job
       end
     end
     include JobListChangeObserver
