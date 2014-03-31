@@ -1,4 +1,4 @@
-require 'logging'
+require 'logger'
 require_relative 'server_monitor'
 
 class BaseServer
