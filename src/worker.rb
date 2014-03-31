@@ -17,7 +17,7 @@ class Worker
     BUSY       = :BUSY
   end
 
-  def initialize(name)
+  def initialize(name, logger=Logger.new(STDERR))
     @id = SecureRandom::uuid()
     @name = name
     @lock = Mutex.new

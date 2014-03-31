@@ -1,21 +1,18 @@
 require 'drb'
+require 'logger'
 require 'thread'
 require 'sync'
 
 require_relative 'job'
-require_relative 'server_monitor'
 require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
 class Client
-  include ServerStatusChecking
   attr_accessor :jobs
-
-
   DEFAULT_THREAD_POOL_SIZE = 32
 
-  def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE)
+  def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
     DRb.start_service
     @submitted_jobs = ReadWriteLockHash.new
     @thread_pool = ThreadPool.new(thread_pool_size)

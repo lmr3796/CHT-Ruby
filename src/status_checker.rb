@@ -1,12 +1,13 @@
 require 'drb'
 
-require_relative 'server_monitor'
+require_relative 'base_server'
 require_relative 'worker'
 require_relative 'common/read_write_lock_hash'
 
-class StatusChecker
+class StatusChecker < BaseServer
   include ServerStatusChecking
-  def initialize(worker_table={})
+  def initialize(worker_table={},arg={})
+    super arg[:logger]
     # TODO: make up a worker table
     @worker_table = worker_table.clone
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
