@@ -63,6 +63,7 @@ class Dispatcher < BaseServer
     end
 
     def schedule_job()
+      @logger.info 'Updating schedule'
       @lock.with_write_lock {
         # TODO: coordinate output from decision maker
         @job_worker_table = @decision_maker.schedule_job(@job_list, @status_checker.worker_status)  # {job_id => [worker1, worker2...]}
@@ -75,6 +76,7 @@ class Dispatcher < BaseServer
           }
         }
       }
+      @logger.info 'Updated schedule successfully'
     end
 
     module JobListChangeObserver
@@ -109,14 +111,17 @@ class Dispatcher < BaseServer
   # Client APIs
   def submit_jobs(job_list)
     job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
+    @logger.info "Job submitted: #{job_id_table}"
     @resource_mutex.synchronize {
       @job_list.merge! job_id_table
     }
+    @logger.debug "Current jobs: #{@job_list.keys}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
   def require_worker(job_id)
     # TODO: what if queue popped but not used? ====> more communications
+    @logger.info "Worker requirement for #{job_id} issued"
     return @job_worker_queues[job_id].pop()
   end
 
@@ -143,6 +148,7 @@ class Dispatcher < BaseServer
   module JobListChangeObserver
     # Observer callbacks
     def on_job_submitted(job_id_list)
+      @logger.debug "Jizz"
       job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
     end
 

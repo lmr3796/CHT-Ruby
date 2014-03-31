@@ -14,6 +14,9 @@ class ReadWriteLockHash
     }
     return value
   end
+  def keys
+    @read_write_lock.with_read_lock{return @underlying_hash.keys}
+  end
 
   def []=(key, value)
     @read_write_lock.with_write_lock{

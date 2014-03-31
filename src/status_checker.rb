@@ -16,12 +16,15 @@ class StatusChecker < BaseServer
   end
   def release_worker(worker)
     @worker_status_table[worker] = Worker::STATUS::AVAILABLE
+    @logger.info "Released worker: #{worker.name}"
   end
   def occupy_worker(worker)
     @worker_status_table[worker] = Worker::STATUS::OCCUPIED
+    @logger.info "Occupied worker: #{worker.name}"
   end
   def worker_running(worker)
     @worker_status_table[worker] = Worker::STATUS::BUSY
+    @logger.info "Mark running worker: #{worker.name}"
   end
   def collect_status(worker=nil)
     # TODO: collect status of all/specified worker

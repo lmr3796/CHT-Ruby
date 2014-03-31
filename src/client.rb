@@ -46,7 +46,8 @@ class Client
     until task_queue.empty? do
       task = task_queue.pop
       worker = @dispatcher.require_worker(job_id)
-      thread_id_list << @thread_pool.schedule{
+      @logger.info "Worker #{worker.name} assigned"
+      thread_id_list << @thread_pool.schedule {
         #TODO: Task execution failure???
         run_task_on_worker(task, job_id, worker)
       }
@@ -65,6 +66,7 @@ class Client
     job_id_list = @dispatcher.submit_jobs(jobs)
     raise 'Submission failed' if !job_id_list or !job_id_list.is_a? Array
 
+    @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index{|job_id, index|
       task_queue = Queue.new
@@ -78,6 +80,7 @@ class Client
 
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
+    @logger.info "Assign a task of #{job_id} to worker #{worker.name}"
     worker = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::WORKER[worker])
     worker.run_task(task, job_id)
   end
