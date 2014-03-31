@@ -2,33 +2,53 @@ require 'drb'
 
 require_relative 'base_server'
 require_relative 'worker'
-require_relative 'common/read_write_lock_hash'
+require_relative 'common/read_write_lock'
 
 class StatusChecker < BaseServer
   def worker_status
-    return @worker_status_table.clone
+    @lock.with_read_lock{return @worker_status_table.clone}
+  end
+  def worker_uri(worker)
+    return @worker_table[worker].instance_variable_get("@uri")
   end
   def initialize(worker_table={},arg={})
     super arg[:logger]
     # TODO: make up a worker table
+    @lock = ReadWriteLock.new
     @worker_table = worker_table.clone
+    p 
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
   end
   def release_worker(worker)
-    @worker_status_table[worker] = Worker::STATUS::AVAILABLE
-    @logger.info "Released worker: #{worker.name}"
+    @lock.with_write_lock {
+      @worker_status_table[worker] = Worker::STATUS::AVAILABLE
+      @worker_table[worker].status = Worker::STATUS::AVAILABLE
+      @logger.info "Released worker: #{worker}"
+    }
   end
   def occupy_worker(worker)
-    @worker_status_table[worker] = Worker::STATUS::OCCUPIED
-    @logger.info "Occupied worker: #{worker.name}"
+    @lock.with_write_lock {
+      @worker_status_table[worker] = Worker::STATUS::OCCUPIED
+      @worker_table[worker].status = Worker::STATUS::OCCUPIED
+      @logger.info "Occupied worker: #{worker}"
+    }
   end
   def worker_running(worker)
-    @worker_status_table[worker] = Worker::STATUS::BUSY
-    @logger.info "Mark running worker: #{worker.name}"
+    @lock.with_write_lock {
+      @worker_status_table[worker] = Worker::STATUS::BUSY
+      @worker_table[worker].status = Worker::STATUS::BUSY
+      @logger.info "Mark running worker: #{worker}"
+    }
   end
-  def collect_status(worker=nil)
-    # TODO: collect status of all/specified worker
-    raise NotImplementedError
+  def collect_status(workers=@worker_table.keys)
+    @logger.info "Collecting status"
+    @lock.with_write_lock {
+      workers.each {|w|
+        status = @worker_table[w].status
+        @logger.info "#{w} is #{status}"
+        @worker_status_table[w] = @worker_table[w].status
+      }
+    }
   end
   # TODO: worker registration at runtime?
 end

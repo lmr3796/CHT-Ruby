@@ -46,7 +46,7 @@ class Client
     until task_queue.empty? do
       task = task_queue.pop
       worker = @dispatcher.require_worker(job_id)
-      @logger.info "Worker #{worker.name} assigned"
+      @logger.info "Worker #{worker} assigned"
       thread_id_list << @thread_pool.schedule {
         #TODO: Task execution failure???
         run_task_on_worker(task, job_id, worker)
@@ -80,8 +80,8 @@ class Client
 
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
-    @logger.info "Assign a task of #{job_id} to worker #{worker.name}"
-    worker = DRb.new_with_uri CHT_Configuration::Address.get_uri(CHT_Configuration::Address::WORKER[worker])
+    @logger.info "Assign a task of #{job_id} to worker #{worker}"
+    worker = DRb.new_with_uri @dispatcher.worker_uri worker
     worker.run_task(task, job_id)
   end
   private :run_task_on_worker

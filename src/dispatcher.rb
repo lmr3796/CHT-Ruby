@@ -50,6 +50,7 @@ class Dispatcher < BaseServer
   end
 
   class ScheduleManager
+    attr_reader :job_worker_table, :worker_job_table
     attr_writer :status_checker, :decision_maker
     def initialize(job_list, arg={})
       @lock = ReadWriteLock.new
@@ -58,14 +59,12 @@ class Dispatcher < BaseServer
       @decision_maker = arg[:decision_maker]
       @status_checker = arg[:status_checker]
       @job_list = job_list
-      @job_list.subscribe_job_list_change(self)
       @logger = arg[:logger]
     end
 
     def schedule_job()
       @logger.info 'Updating schedule'
       @lock.with_write_lock {
-        # TODO: coordinate output from decision maker
         @job_worker_table = @decision_maker.schedule_job(@job_list, @status_checker.worker_status)  # {job_id => [worker1, worker2...]}
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
@@ -78,18 +77,6 @@ class Dispatcher < BaseServer
       }
       @logger.info 'Updated schedule successfully'
     end
-
-    module JobListChangeObserver
-      # Observer call back
-      def on_job_submitted(job_id_list)
-        schedule_job
-      end
-      def on_job_deleted()
-        schedule_job
-      end
-    end
-    include JobListChangeObserver
-
   end
 
   attr_writer :status_checker, :decision_maker
@@ -111,10 +98,8 @@ class Dispatcher < BaseServer
   # Client APIs
   def submit_jobs(job_list)
     job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
-    @logger.info "Job submitted: #{job_id_table}"
-    @resource_mutex.synchronize {
-      @job_list.merge! job_id_table
-    }
+    @logger.info "Job submitted: #{job_id_table.keys}"
+    @job_list.merge! job_id_table
     @logger.debug "Current jobs: #{@job_list.keys}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
@@ -122,7 +107,9 @@ class Dispatcher < BaseServer
   def require_worker(job_id)
     # TODO: what if queue popped but not used? ====> more communications
     @logger.info "Worker requirement for #{job_id} issued"
-    return @job_worker_queues[job_id].pop()
+    worker = @job_worker_queues[job_id].pop()
+    @logger.info "Worker #{worker} assigned to #{job_id}"
+    return worker
   end
 
   def job_done(job_id)
@@ -131,25 +118,41 @@ class Dispatcher < BaseServer
 
   # Worker APIs
   def on_worker_available(worker)
+    @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize {
-      @job_worker_queues[ @worker_job_table[worker] ].push(worker)
+      @logger.info 'jizz1'
+      p @schedule_manager.worker_job_table
+      p worker
+      p next_job_assigned = @schedule_manager.worker_job_table[worker]
+      @logger.info 'jizz2'
+      return unless next_job_assigned 
+      @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker
-    } if @worker_job_table.has_key? worker 
+    }
   end
 
 
   # General APIs
-
   def worker_status()
     # TODO: implement this
     raise NotImplementedError
+  end
+  def worker_uri(worker)
+    return @status_checker.worker_uri worker
   end
 
   module JobListChangeObserver
     # Observer callbacks
     def on_job_submitted(job_id_list)
-      @logger.debug "Jizz"
       job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
+      # TODO: might need to refactor to observers...
+      @schedule_manager.schedule_job
+      @status_checker.collect_status
+      p @status_checker.worker_status
+      p @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}
+      @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
+        on_worker_available(w)
+      end
     end
 
     def on_job_deleted(job_id)
@@ -162,6 +165,12 @@ class Dispatcher < BaseServer
         end
         @job_worker_queues.delete(job_id)
       }
+      # TODO: might need to refactor to observers...
+      @schedule_manager.schedule_job
+      @status_checker.collect_status
+      @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
+        on_worker_available(w)
+      end
     end
   end
   include JobListChangeObserver

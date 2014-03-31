@@ -9,13 +9,12 @@ class Worker
   attr_reader :name, :status, :id
   attr_writer :status_checker
 
-
   module STATUS
     DOWN       = :DOWN
     UNKNOWN    = :UNKNOWN
-    OCCUPIED   = :OCCUPIED
-    AVAILABLE  = :AVAILABLE
-    BUSY       = :BUSY
+    OCCUPIED   = :OCCUPIED    # Assigned to a job but not running a task
+    AVAILABLE  = :AVAILABLE   # Idle, not assigned to a job
+    BUSY       = :BUSY        # Running a task
   end
 
   def initialize(name, logger=Logger.new(STDERR))
@@ -26,18 +25,22 @@ class Worker
     @logger = logger
   end
 
+  def status=(s)
+    raise ArgumentError if !STATUS::constants.include? s
+    @logger.info "Worker status set to #{s}"
+    @status = s
+  end
+
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
-    @logger.info "Running task of #{job_uuid}"
     res = nil
     @lock.synchronize{  # Worker is dedicated
-      @status = STATUS::BUSY
-      @status_worker.worker_running @id
+      @logger.info "Running task of #{job_uuid}"
+      @status_checker.worker_running @id
       res = run_cmd(task.cmd, task.args)
-      @status = STATUS::AVAILABLE
-      @status_worker.release_worker @id
+      @status_checker.release_worker @id
+      @logger.info "Finished task of #{job_uuid}"
     }
-    @logger.info "Finished task of #{job_uuid}"
     return res
   end
 
