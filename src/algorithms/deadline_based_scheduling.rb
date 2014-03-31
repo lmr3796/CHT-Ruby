@@ -4,7 +4,7 @@ module SchedulingAlgorithm
   class DeadlineBasedScheduling
     def initialize()
     end
-    def schedule_job(job_list, worker_status, current_schedule)
+    def schedule_job(job_list, worker_status, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
       # current_schedule: {job_id => [worker_id, ...]}
