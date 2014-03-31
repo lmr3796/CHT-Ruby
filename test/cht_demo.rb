@@ -30,7 +30,7 @@ for i in 0...4 do
   h264_job.add_task Task.new(RUN_PATH + '/h264.sh')
 end
 
-CHT_Configuration::Address::WORKERS.each do |worker|
+CHT_Configuration::Address::WORKERS.keys.each do |worker|
   wc_job.task_running_time_on_worker[worker] = WC_PER_TASK_RUNNING_TIME
   bzip2_job.task_running_time_on_worker[worker] = BZIP2_PER_TASK_RUNNING_TIME
   h264_job.task_running_time_on_worker[worker] = H264_PER_TASK_RUNNING_TIME
