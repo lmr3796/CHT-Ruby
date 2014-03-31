@@ -11,6 +11,7 @@ class Dispatcher < BaseServer
       @subscribe_list_mutex = Mutex.new
       @job_list_subscribers = []
       @merge_mutex = Mutex.new
+      @logger = logger
       super
     end
 
@@ -50,7 +51,7 @@ class Dispatcher < BaseServer
 
   class ScheduleManager
     attr_writer :status_checker, :decision_maker
-    def initialize(job_list, decision_maker, status_checker)
+    def initialize(job_list, decision_maker, status_checker, logger)
       @lock = ReadWriteLock.new
       @worker_job_table = {}
       @job_worker_table = {}
@@ -58,6 +59,7 @@ class Dispatcher < BaseServer
       @status_checker = status_checker
       @job_list = job_list
       @job_list.subscribe_job_list_change(self)
+      @logger = logger
     end
 
     def schedule_job()
@@ -99,7 +101,7 @@ class Dispatcher < BaseServer
     @job_list.subscribe_job_list_change(self)
     @status_checker = status_checker
     @decision_maker = decision_maker
-    @schedule_manager = ScheduleManager.new(@job_list, @status_checker, @decision_maker)
+    @schedule_manager = ScheduleManager.new(@job_list, @status_checker, @decision_maker, @logger)
   end
 
   # Client APIs
