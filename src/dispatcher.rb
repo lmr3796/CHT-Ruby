@@ -7,12 +7,12 @@ require_relative 'common/read_write_lock_hash'
 class Dispatcher < BaseServer
 
   class JobList < ReadWriteLockHash
-    def initialize()
+    def initialize(logger)
+      super()
       @subscribe_list_mutex = Mutex.new
       @job_list_subscribers = []
       @merge_mutex = Mutex.new
       @logger = logger
-      super
     end
 
     module JobListChangeSubscriber
@@ -97,7 +97,7 @@ class Dispatcher < BaseServer
     super arg[:logger]
     @resource_mutex = Mutex.new
     @job_worker_queues = ReadWriteLockHash.new
-    @job_list = JobList.new
+    @job_list = JobList.new @logger
     @job_list.subscribe_job_list_change(self)
     @status_checker = status_checker
     @decision_maker = decision_maker
