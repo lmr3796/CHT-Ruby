@@ -63,7 +63,7 @@ class Client
   def send_jobs(jobs)
     # Convert to a job list if a single job passed
     jobs = [jobs] unless jobs.is_a? Array
-    jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a(Job)}
+    jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a? Job}
     job_id_list = @dispatcher.submit_jobs(jobs)
     raise 'Submission failed' if !job_id_list or !job_id_list.is_a? Array
 

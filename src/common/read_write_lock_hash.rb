@@ -43,6 +43,7 @@ class ReadWriteLockHash
     @read_write_lock.with_write_lock{
       @underlying_hash.merge!(hash, &block)
     }
+    return self
   end
 
 end

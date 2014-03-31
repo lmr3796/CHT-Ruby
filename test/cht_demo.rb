@@ -3,10 +3,11 @@
 require 'thread'
 
 require_relative '../config/config'
+require_relative '../src/client'
 require_relative '../src/job'
 
 
-
+RUN_PATH='/home/lmr3796/CHT-Ruby/test/spec_job_scripts'
 BZIP2_PER_TASK_RUNNING_TIME = 42
 H264_PER_TASK_RUNNING_TIME = 80
 WC_PER_TASK_RUNNING_TIME = 14
@@ -15,9 +16,9 @@ WC_PER_TASK_RUNNING_TIME = 14
 total_deadline = ARGV.shift.to_f
 delay = ARGV.shift.to_f
 
-wc_job = Job('word count')
-bzip2_job = Job('bzip2')
-h264_job = Job('h264')
+wc_job = Job.new('word count')
+bzip2_job = Job.new('bzip2')
+h264_job = Job.new('h264')
 for i in 0...20 do
   wc_job.add_task Task.new(RUN_PATH + '/word_count.sh')
 end
@@ -28,10 +29,10 @@ for i in 0...4 do
   h264_job.add_task Task.new(RUN_PATH + '/h264.sh')
 end
 
-CHT_Configuration::Address::WORKERS.each do
-  wc_job.task_running_time_on_server[worker] = WC_PER_TASK_RUNNING_TIME
-  bzip2_job.task_running_time_on_server[worker] = BZIP2_PER_TASK_RUNNING_TIME
-  h264_job.task_running_time_on_server[worker] = H264_PER_TASK_RUNNING_TIME
+CHT_Configuration::Address::WORKERS.each do |worker|
+  wc_job.task_running_time_on_worker[worker] = WC_PER_TASK_RUNNING_TIME
+  bzip2_job.task_running_time_on_worker[worker] = BZIP2_PER_TASK_RUNNING_TIME
+  h264_job.task_running_time_on_worker[worker] = H264_PER_TASK_RUNNING_TIME
 end
 
 wc_job.priority = 3
@@ -41,9 +42,7 @@ h264_job.priority = 1
 # First batch
 print 'Dispatching first batch'
 job_set = [wc_job]
-job_set.each do
-  j.deadline = total_deadline
-end
+job_set.each {|job| job.deadline = total_deadline}
 # TODO: print schedule?
 #schedule = framework.get_dispatcher().schedule_jobs(job_set)
 #print schedule
