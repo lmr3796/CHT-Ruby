@@ -1,5 +1,6 @@
 #! /usr/bin/env ruby
 
+require 'time'
 require 'thread'
 
 require_relative '../config/config'
@@ -40,7 +41,7 @@ bzip2_job.priority = 2
 h264_job.priority = 1
 
 # First batch
-print 'Dispatching first batch'
+puts 'Dispatching first batch'
 job_set = [wc_job]
 job_set.each {|job| job.deadline = total_deadline}
 # TODO: print schedule?
@@ -51,13 +52,15 @@ c1 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
 c1.start()
 
 # Simulate gap between job arrival
-time.sleep(delay)
+print "Sleep for #{delay} seconds..."
+sleep(delay)
+puts "go"
 
 # Second batch
-print 'Dispatching second batch'
+puts 'Dispatching second batch'
 job_set = [bzip2_job, h264_job]
-job_set.each do
-  j.deadline = total_deadline - delay
+job_set.each do |job|
+  job.deadline = total_deadline - delay
 end
 # TODO: print schedule?
 #schedule = framework.get_dispatcher().schedule_jobs(job_set)

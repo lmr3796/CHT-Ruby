@@ -69,7 +69,6 @@ class Client
       task_queue = Queue.new
       tasks = jobs[index].task
       tasks.each {|x| task_queue.push x}
-      @task_count[job_id] = tasks.size
       @submitted_jobs[job_id] = task_queue
     }
     return job_id_list

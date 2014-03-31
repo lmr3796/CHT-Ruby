@@ -14,22 +14,25 @@ class Dispatcher < BaseServer
       super
     end
 
-    # Observer's pattern
-    def subscribe_job_list_change(subscriber)
-      @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
+    module JobListChangeSubscriber
+      # Observer pattern
+      def subscribe_job_list_change(subscriber)
+        @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
+      end
+      def publish_job_submitted(job_id_list)
+        @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
+      end
+      def publish_job_deleted(job_id)
+        @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
+      end
     end
-    def publish_job_submitted(job_id_list)
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
-    end
-    def publish_job_deleted(job_id)
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
-    end
+    include JobListChangeSubscriber
 
     # TODO: Hook notifier on writing methods
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
     def []=(job_id, job)
       super
-      publish_job_add [job_id]
+      publish_job_submitted [job_id]
     end
 
     def delete(job_id)
@@ -105,7 +108,7 @@ class Dispatcher < BaseServer
     @resource_mutex.synchronize {
       @job_list.merge! job_id_table
     }
-    return job_id_list  # Returning a UUID list stands for acceptance
+    return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
   def require_worker(job_id)
@@ -121,37 +124,37 @@ class Dispatcher < BaseServer
   def on_worker_available(worker)
     @resource_mutex.synchronize {
       @job_worker_queues[ @worker_job_table[worker] ].push(worker)
-      @statusChecker.occupy_worker worker
+      @status_checker.occupy_worker worker
     } if @worker_job_table.has_key? worker 
   end
 
 
   # General APIs
 
-  # Observer callbacks
-  def on_job_submitted(job_id_list)
-    job_id_list.each { |job_id|
-      @job_worker_table[job_id].each { |worker|
-        @job_worker_queues[job_id] = Queue.new
-      }
-    }
-  end
-
-  def on_job_deleted(job_id)
-    # Clear the entrie in @job_worker_queues[job_id]
-    # Release nodes first
-    @resource_mutex.synchronize {
-      until @job_worker_queues[job_id].empty? do
-        worker = @job_worker_queues[job_id].pop
-        @status_checker.release worker
-      end
-      @job_worker_queues.delete(job_id)
-    }
-  end
-
   def worker_status()
     # TODO: implement this
     raise NotImplementedError
   end
+
+  module JobListChangeObserver
+    # Observer callbacks
+    def on_job_submitted(job_id_list)
+      job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
+    end
+
+    def on_job_deleted(job_id)
+      # Clear the entry in @job_worker_queues[job_id]
+      # Release nodes first
+      @resource_mutex.synchronize {
+        until @job_worker_queues[job_id].empty? do
+          worker = @job_worker_queues[job_id].pop
+          @status_checker.release worker
+        end
+        @job_worker_queues.delete(job_id)
+      }
+    end
+  end
+  include JobListChangeObserver
+
 
 end

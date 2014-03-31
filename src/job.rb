@@ -1,5 +1,6 @@
 
 class Job
+  attr_reader :task
   attr_accessor :priority, :deadline, :task_running_time_on_worker
   def initialize(priority=0, deadline=0, task_running_time_on_worker={})
     @task = []

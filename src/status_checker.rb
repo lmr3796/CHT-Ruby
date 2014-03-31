@@ -5,7 +5,9 @@ require_relative 'worker'
 require_relative 'common/read_write_lock_hash'
 
 class StatusChecker < BaseServer
-  include ServerStatusChecking
+  def worker_status
+    return @worker_status_table.clone
+  end
   def initialize(worker_table={},arg={})
     super arg[:logger]
     # TODO: make up a worker table
