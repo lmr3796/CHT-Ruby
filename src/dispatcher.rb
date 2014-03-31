@@ -37,22 +37,22 @@ class Dispatcher < BaseServer
       publish_job_deleted job_id
     end
 
-    def merge!(to_add)
-      job_id_list = nil
-      @read_write_lock.with_write_lock{
-        job_id_list = to_add.keys - @underlying_hash.keys
-        @underlying_hash.merge!(to_add, &block)
-      }
-      publish_job_add job_id_list
+    def merge!(to_add, &block)
+      super
+      publish_job_submitted @underlying_hash.keys
+      return self
     end
 
   end
 
   class ScheduleManager
-    def initialize(job_list)
+    attr_writer :status_checker, :decision_maker
+    def initialize(job_list, decision_maker, status_checker)
       @lock = ReadWriteLock.new
       @worker_job_table = {}
       @job_worker_table = {}
+      @decision_maker = decision_maker
+      @status_checker = status_checker
       @job_list = job_list
       @job_list.subscribe_job_list_change(self)
     end
@@ -60,7 +60,7 @@ class Dispatcher < BaseServer
     def schedule_job()
       @lock.with_write_lock {
         # TODO: coordinate output from decision maker
-        @job_worker_table = decision_maker.schedule_job(@job_list)  # {job_id => [worker1, worker2...]}
+        @job_worker_table = @decision_maker.schedule_job(@job_list, @status_checker.worker_status)  # {job_id => [worker1, worker2...]}
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
           # TODO: maybe only update the table with those changed
@@ -72,30 +72,31 @@ class Dispatcher < BaseServer
       }
     end
 
-    # Observer call back
-    def on_job_submitted(job_id_list)
-      # TODO: implement this...
-      raise NotImplementedError
+    module JobListChangeObserver
+      # Observer call back
+      def on_job_submitted(job_id_list)
+        # TODO: implement this...
+      end
+      def on_job_deleted()
+        # TODO: implement this...
+        raise NotImplementedError
+      end
     end
-    def on_job_deleted()
-      # TODO: implement this...
-      raise NotImplementedError
-    end
+    include JobListChangeObserver
 
   end
 
   attr_writer :status_checker, :decision_maker
 
-  def initialize(arg={})
-    raise ArgumentError.new(arg.to_s) if !(arg.keys-[:status_checker, :decision_maker]).empty?
+  def initialize(status_checker, decision_maker, arg={})
     super arg[:logger]
+    @resource_mutex = Mutex.new
+    @job_worker_queues = ReadWriteLockHash.new
     @job_list = JobList.new
     @job_list.subscribe_job_list_change(self)
-    @schedule_manager = ScheduleManager.new(@job_list)
-    @job_worker_queues = ReadWriteLockHash.new
-    @resource_mutex = Mutex.new
-    @status_checker = arg[:status_checker]
-    @decision_maker = arg[:decision_maker]
+    @status_checker = status_checker
+    @decision_maker = decision_maker
+    @schedule_manager = ScheduleManager.new(@job_list, @status_checker, @decision_maker)
   end
 
   # Client APIs
