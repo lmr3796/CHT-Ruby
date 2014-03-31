@@ -45,7 +45,7 @@ end
 # Initiate and run the worker as a DRb object
 status_checker = DRbObject.new_with_uri options[:status_checker]
 decision_maker = DRbObject.new_with_uri options[:decision_maker]
-dispatcher = Dispatcher.new status_checker, decision_maker
+dispatcher = Dispatcher.new :status_checker => status_checker, :decision_maker => decision_maker
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, dispatcher 

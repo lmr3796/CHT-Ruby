@@ -51,15 +51,15 @@ class Dispatcher < BaseServer
 
   class ScheduleManager
     attr_writer :status_checker, :decision_maker
-    def initialize(job_list, decision_maker, status_checker, logger)
+    def initialize(job_list, arg={})
       @lock = ReadWriteLock.new
       @worker_job_table = {}
       @job_worker_table = {}
-      @decision_maker = decision_maker
-      @status_checker = status_checker
+      @decision_maker = arg[:decision_maker]
+      @status_checker = arg[:status_checker]
       @job_list = job_list
       @job_list.subscribe_job_list_change(self)
-      @logger = logger
+      @logger = arg[:logger]
     end
 
     def schedule_job()
@@ -93,15 +93,18 @@ class Dispatcher < BaseServer
 
   attr_writer :status_checker, :decision_maker
 
-  def initialize(status_checker, decision_maker, arg={})
+  def initialize(arg={})
     super arg[:logger]
     @resource_mutex = Mutex.new
     @job_worker_queues = ReadWriteLockHash.new
     @job_list = JobList.new @logger
     @job_list.subscribe_job_list_change(self)
-    @status_checker = status_checker
-    @decision_maker = decision_maker
-    @schedule_manager = ScheduleManager.new(@job_list, @status_checker, @decision_maker, @logger)
+    @status_checker = arg[:status_checker]
+    @decision_maker = arg[:decision_maker]
+    @schedule_manager = ScheduleManager.new @job_list, 
+      :status_checker => @status_checker,
+      :decision_maker => @decision_maker,
+      :logger => @logger
   end
 
   # Client APIs

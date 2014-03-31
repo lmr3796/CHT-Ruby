@@ -6,7 +6,6 @@ class BaseServer
   include ServerStatusChecking
   def initialize(logger=nil)
     @logger = logger || Logger.new(STDERR)
-    p @logger
   end
   def logger=(f)
     @logger = f.is_a?(Logger) ? f : Logger.new(f)
