@@ -18,6 +18,7 @@ class Client
     @thread_pool = ThreadPool.new(thread_pool_size)
     @dispatcher = DRbObject.new_with_uri dispatcher_uri
     @jobs = jobs
+    @logger = logger
   end
 
   def start(blocking=false)

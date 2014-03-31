@@ -1,4 +1,5 @@
 require 'open3'
+require 'logger'
 require 'thread'
 require 'securerandom'
 
@@ -22,6 +23,7 @@ class Worker
     @name = name
     @lock = Mutex.new
     @status = STATUS::AVAILABLE
+    @logger = logger
   end
 
   def run_task(task, job_uuid=nil)
