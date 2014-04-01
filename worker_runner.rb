@@ -49,5 +49,5 @@ status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration
 worker.status_checker = DRbObject.new_with_uri status_checker_druby_uri
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service worker_druby_uri, worker
-$stderr.puts "Running on #{worker_druby_uri}..."
+$stderr.puts "Worker #{options[:name]} running on #{worker_druby_uri}..."
 DRb.thread.join

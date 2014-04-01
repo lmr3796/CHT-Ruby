@@ -36,6 +36,9 @@ class StatusChecker < BaseServer
   end
   def worker_running(worker)
     @lock.with_write_lock {
+      @logger.debug @worker
+      @logger.debug @worker_status_table
+      @logger.debug @worker_table
       @worker_status_table[worker] = Worker::STATUS::BUSY
       @worker_table[worker].status = Worker::STATUS::BUSY
       @logger.info "Mark running worker: #{worker}"

@@ -45,6 +45,7 @@ class Worker
   end
 
   def run_cmd(command, *args)
+    @logger.debug("Run `#{command} #{args.join(' ')}`")
     # Should use wait_thr instead of $?; $? not working when using DRb
     stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
     result = {
