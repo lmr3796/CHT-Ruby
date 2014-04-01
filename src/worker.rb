@@ -1,5 +1,6 @@
 require 'open3'
 require 'logger'
+require 'time'
 require 'thread'
 require 'securerandom'
 
@@ -45,7 +46,8 @@ class Worker
   end
 
   def run_cmd(command, *args)
-    @logger.debug("Running `#{command}#{args.join(' ')}`")
+    @logger.debug "Running `#{command}#{args.join(' ')}`"
+    start = Time.now
     # Should use wait_thr instead of $?; $? not working when using DRb
     stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
     result = {
@@ -56,6 +58,8 @@ class Worker
     stdin.close
     stdout.close
     stderr.close
+    elapsed = Time.now - start
+    @logger.debug "`#{command}#{args.join(' ')}` done in #{elapsed} seconds"
     return result
   end
 
