@@ -1,6 +1,7 @@
 require 'drb'
 require 'logger'
 require 'thread'
+require 'time'
 require 'sync'
 
 require_relative 'job'
@@ -81,8 +82,9 @@ class Client
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
     @logger.info "Assign a task of #{job_id} to worker #{worker}"
-    worker = DRbObject.new_with_uri @dispatcher.worker_uri worker
-    worker.run_task(task, job_id)
+    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
+    res = worker_server.run_task(task, job_id)
+    @logger.info "Task of #{job_id} returned from worker #{worker} in #{res[:elapsed]} seconds"
   end
   private :run_task_on_worker
 
