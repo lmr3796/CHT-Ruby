@@ -38,8 +38,8 @@ class Worker
     @lock.synchronize{  # Worker is dedicated
       @status_checker.worker_running @name
       @logger.info "Running task of #{job_uuid}"
-      res = run_cmd(task.cmd, *task.args)
-      @logger.info "Finished task of #{job_uuid}"
+      res, elapsed= run_cmd(task.cmd, *task.args)
+      @logger.info "Finished task of #{job_uuid} in #{elapsed} seconds"
       @status_checker.release_worker @name
     }
     return res
@@ -59,8 +59,9 @@ class Worker
     stdout.close
     stderr.close
     elapsed = Time.now - start
+    result[:elapsed] = elapsed
     @logger.debug "`#{command}#{args.join(' ')}` done in #{elapsed} seconds"
-    return result
+    return result, elapsed
   end
 
 end
