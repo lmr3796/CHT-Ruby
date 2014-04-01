@@ -42,13 +42,21 @@ class StatusChecker < BaseServer
   end
   def collect_status(workers=@worker_table.keys)
     @logger.info "Collecting status"
-    @lock.with_write_lock {
-      workers.each {|w|
-        status = @worker_table[w].status
-        @logger.info "#{w} is #{status}"
-        @worker_status_table[w] = @worker_table[w].status
-      }
-    }
+    @lock.with_write_lock do
+      workers.each do |w|
+        status = nil
+        begin
+          status = @worker_table[w].status
+        rescue => e
+          @logger.warn "Exception #{e} when checking status of worker #{w}"
+          @logger.debug e.backtrace
+          status = Worker::STATUS::DOWN
+        ensure
+          @logger.info "#{w} is #{status}"
+          @worker_status_table[w] = status 
+        end
+      end
+    end
   end
   # TODO: worker registration at runtime?
 end
