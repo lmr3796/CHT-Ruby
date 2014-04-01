@@ -37,9 +37,9 @@ class Worker
     res = nil
     @lock.synchronize{  # Worker is dedicated
       @status_checker.worker_running @name
-      @logger.info "Running task of #{job_uuid}"
+      @logger.info "Running task of job #{job_uuid}"
       res, elapsed= run_cmd(task.cmd, *task.args)
-      @logger.info "Finished task of #{job_uuid} in #{elapsed} seconds"
+      @logger.info "Finished task of job #{job_uuid} in #{elapsed} seconds"
       @status_checker.release_worker @name
     }
     return res
