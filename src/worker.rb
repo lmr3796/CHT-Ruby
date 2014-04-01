@@ -36,11 +36,11 @@ class Worker
     raise 'Not a proper task to run' if !task.is_a? Task
     res = nil
     @lock.synchronize{  # Worker is dedicated
-      @logger.info "Running task of #{job_uuid}"
       @status_checker.worker_running @name
+      @logger.info "Running task of #{job_uuid}"
       res = run_cmd(task.cmd, *task.args)
-      @status_checker.release_worker @name
       @logger.info "Finished task of #{job_uuid}"
+      @status_checker.release_worker @name
     }
     return res
   end
