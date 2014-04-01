@@ -37,7 +37,7 @@ class Worker
     @lock.synchronize{  # Worker is dedicated
       @logger.info "Running task of #{job_uuid}"
       @status_checker.worker_running @name
-      res = run_cmd(task.cmd, task.args)
+      res = run_cmd(task.cmd, *task.args)
       @status_checker.release_worker @name
       @logger.info "Finished task of #{job_uuid}"
     }
@@ -45,7 +45,7 @@ class Worker
   end
 
   def run_cmd(command, *args)
-    @logger.debug("Run `#{command} #{args.join(' ')}`")
+    @logger.debug("Running `#{command}#{args.join(' ')}`")
     # Should use wait_thr instead of $?; $? not working when using DRb
     stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
     result = {
