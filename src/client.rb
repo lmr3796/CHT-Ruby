@@ -81,7 +81,7 @@ class Client
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
     @logger.info "Assign a task of #{job_id} to worker #{worker}"
-    worker = DRb.new_with_uri @dispatcher.worker_uri worker
+    worker = DRbObject.new_with_uri @dispatcher.worker_uri worker
     worker.run_task(task, job_id)
   end
   private :run_task_on_worker

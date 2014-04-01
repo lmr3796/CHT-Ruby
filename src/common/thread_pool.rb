@@ -71,6 +71,7 @@ class ThreadPool
       rescue Exception => e
         message = "Exception raised in a block scheduled by ThreadPool: #{e.message} (#{e.class.to_s})\n"
         $stderr.puts message
+        $stderr.puts e.backtrace
       end
       job.done!
     end

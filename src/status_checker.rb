@@ -18,6 +18,7 @@ class StatusChecker < BaseServer
     @worker_table = worker_table.clone
     p 
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
+    collect_status
   end
   def release_worker(worker)
     @lock.with_write_lock {
