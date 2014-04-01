@@ -120,11 +120,11 @@ class Dispatcher < BaseServer
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize {
-      @logger.info 'jizz1'
-      p @schedule_manager.worker_job_table
-      p worker
-      p next_job_assigned = @schedule_manager.worker_job_table[worker]
-      @logger.info 'jizz2'
+      #@logger.info 'jizz1'
+      #p @schedule_manager.worker_job_table
+      #p worker
+      #p next_job_assigned = @schedule_manager.worker_job_table[worker]
+      #@logger.info 'jizz2'
       return unless next_job_assigned 
       @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker

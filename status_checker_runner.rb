@@ -21,7 +21,7 @@ OptionParser.new do |opts|
 
 end.parse!
 
-options[:port] ||= (ARGV.shift or CHT_Configuration::Address::DefaultPorts::STATUS_CHECKER_DEFAULT_PORT).to_i
+options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::STATUS_CHECKER_DEFAULT_PORT).to_i
 
 if !ARGV.empty?
   print("Unrecognized arguments: ", *ARGV, "\n")

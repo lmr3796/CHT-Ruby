@@ -33,7 +33,7 @@ OptionParser.new do |opts|
 
 end.parse!
 
-options[:port] ||= (ARGV.shift or CHT_Configuration::Address::DefaultPorts::DECISION_MAKER_DEFAULT_PORT).to_i
+options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::DECISION_MAKER_DEFAULT_PORT).to_i
 options[:status_checker] ||= CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
 options[:algo] ||= CHT_Configuration::Algorithm::ALGORITHM
 

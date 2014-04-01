@@ -26,10 +26,18 @@ OptionParser.new do |opts|
     options[:port] = port.to_i
   end
 
+  # Specify the status checker address
+  opts.on('-s status_checker_address', '--status_checker_address status_checker_address', 'Specify address of status checker') do |addr|
+    options[:status_checker_address] = addr
+  end
+
+
 end.parse!
 
-options[:port] ||= (ARGV.shift or CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
-options[:name] ||= ARGV.shift or `hostname` or SecureRandom.uuid
+options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
+options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
+options[:status_checker_address] ||= CHT_Configuration::Address::STATUS_CHECKER
+
 
 if !ARGV.empty?
   print("Unrecognized arguments: ", *ARGV, "\n")
