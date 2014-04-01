@@ -18,7 +18,6 @@ OptionParser.new do |opts|
           If the name exists in the configuration will use corresponding settings') do |name|
     options[:name] = name
     options[:port] = CHT_Configuration::Address::WORKERS[:port]
-    options[:address] = CHT_Configuration::Address::WORKERS[:address]
   end
 
   # Specify the port to listen
@@ -36,7 +35,7 @@ end.parse!
 
 options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
 options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
-options[:status_checker_address] ||= CHT_Configuration::Address::STATUS_CHECKER
+options[:status_checker_address] = "druby://#{options[:status_checker_address]}" if options[:status_checker_address]
 
 
 if !ARGV.empty?
@@ -46,7 +45,9 @@ end
 
 # Initiate and run the worker as a DRb object
 worker = Worker.new options[:name]
-druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
-DRb.start_service druby_uri, worker
-$stderr.puts "Running on #{druby_uri}..."
+status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
+worker.status_checker = DRbObject.new_with_uri status_checker_druby_uri
+worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
+DRb.start_service worker_druby_uri, worker
+$stderr.puts "Running on #{worker_druby_uri}..."
 DRb.thread.join
