@@ -85,6 +85,8 @@ class Client
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
     res = worker_server.run_task(task, job_id)
     @logger.info "Task of #{job_id} returned from worker #{worker} in #{res[:elapsed]} seconds"
+    worker_server.release
+    @logger.info "Release worker #{worker}"
   end
   private :run_task_on_worker
 

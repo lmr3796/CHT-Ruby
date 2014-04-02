@@ -16,8 +16,8 @@ class StatusChecker < BaseServer
     # TODO: make up a worker table
     @lock = ReadWriteLock.new
     @worker_table = worker_table.clone
-    p 
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
+    @dispatcher = arg[:dispatcher]
     collect_status
   end
   def release_worker(worker)
@@ -26,6 +26,7 @@ class StatusChecker < BaseServer
       @worker_table[worker].status = Worker::STATUS::AVAILABLE
       @logger.info "Released worker: #{worker}"
     }
+    @dispatcher.on_worker_available(worker)
   end
   def occupy_worker(worker)
     @lock.with_write_lock {

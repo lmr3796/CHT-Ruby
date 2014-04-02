@@ -101,6 +101,7 @@ class Dispatcher < BaseServer
     @logger.info "Job submitted: #{job_id_table.keys}"
     @job_list.merge! job_id_table
     @logger.debug "Current jobs: #{@job_list.keys}"
+    @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
@@ -121,11 +122,10 @@ class Dispatcher < BaseServer
     @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize {
       next_job_assigned = @schedule_manager.worker_job_table[worker]
-      p @schedule_manager.worker_job_table
-      p worker
-      p next_job_assigned
-      return unless next_job_assigned 
+      return unless @job_worker_queues[next_job_assigned]
+      @logger.debug "Pushing #{worker} to #{next_job_assigned}"
       @job_worker_queues[next_job_assigned].push(worker)
+      @logger.debug "Pushed #{worker} to #{next_job_assigned}"
       @status_checker.occupy_worker worker
     }
   end
@@ -147,8 +147,6 @@ class Dispatcher < BaseServer
       # TODO: might need to refactor to observers...
       @schedule_manager.schedule_job
       @status_checker.collect_status
-      p @status_checker.worker_status
-      p @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}
       @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
         on_worker_available(w)
       end

@@ -51,25 +51,25 @@ dispatcher_addr = CHT_Configuration::Address::DISPATCHER
 c1 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
 c1.start()
 
-# Simulate gap between job arrival
-print "Sleep for #{delay} seconds..."
-sleep(delay)
-puts "go"
-
-# Second batch
-puts 'Dispatching second batch'
-job_set = [bzip2_job, h264_job]
-job_set.each do |job|
-  job.deadline = total_deadline - delay
-end
-# TODO: print schedule?
-#schedule = framework.get_dispatcher().schedule_jobs(job_set)
-#print schedule
-dispatcher_addr = CHT_Configuration::Address::DISPATCHER
-c2 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
-c2.start()
-
-# Wait till finish
+## Simulate gap between job arrival
+#print "Sleep for #{delay} seconds..."
+#sleep(delay)
+#puts "go"
+#
+## Second batch
+#puts 'Dispatching second batch'
+#job_set = [bzip2_job, h264_job]
+#job_set.each do |job|
+#  job.deadline = total_deadline - delay
+#end
+## TODO: print schedule?
+##schedule = framework.get_dispatcher().schedule_jobs(job_set)
+##print schedule
+#dispatcher_addr = CHT_Configuration::Address::DISPATCHER
+#c2 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
+#c2.start()
+#
+## Wait till finish
+#c2.wait_all
 c1.wait_all
-c2.wait_all
 

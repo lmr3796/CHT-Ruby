@@ -19,9 +19,15 @@ OptionParser.new do |opts|
     options[:port] = port.to_i
   end
 
+  # Specify the druby address of the dispatcher
+  opts.on('-s dispatcher_address', '--dispatcher dispatcher_address', 'Specify the address of the dispatcher') do |addr|
+    options[:dispatcher_addr] = "druby://#{options[:dispatcher_addr]}"
+  end
+
 end.parse!
 
 options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::STATUS_CHECKER_DEFAULT_PORT).to_i
+options[:dispatcher_addr] ||= CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER)
 
 if !ARGV.empty?
   print("Unrecognized arguments: ", *ARGV, "\n")
@@ -30,7 +36,8 @@ end
 
 # Initiate and run the worker as a DRb object
 workers = Hash[CHT_Configuration::Address::WORKERS.map{|n,addr| [n, DRbObject.new_with_uri(CHT_Configuration::Address::druby_uri(addr))]}]
-status_checker = StatusChecker.new workers
+dispatcher = DRbObject.new_with_uri options[:dispatcher_addr]
+status_checker = StatusChecker.new workers, :dispatcher => dispatcher
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, status_checker

@@ -32,6 +32,11 @@ class Worker
     @status = s
   end
 
+  def release()
+    # TODO: what if maliciously called?
+    @status_checker.release_worker @name
+  end
+
   def run_task(task, job_uuid=nil)
     raise 'Not a proper task to run' if !task.is_a? Task
     res = nil
@@ -40,7 +45,6 @@ class Worker
       @logger.info "Running task of job #{job_uuid}"
       res, elapsed= run_cmd(task.cmd, *task.args)
       @logger.info "Finished task of job #{job_uuid} in #{elapsed} seconds"
-      @status_checker.release_worker @name
     }
     return res
   end
