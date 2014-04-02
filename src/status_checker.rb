@@ -62,6 +62,7 @@ class StatusChecker < BaseServer
         end
       end
     end
+    return worker_status
   end
   # TODO: worker registration at runtime?
 end

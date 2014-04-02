@@ -146,8 +146,10 @@ class Dispatcher < BaseServer
       job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
       # TODO: might need to refactor to observers...
       @schedule_manager.schedule_job
-      @status_checker.collect_status
-      @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
+      @logger.info "Collecting status from status checker"
+      worker_status = @status_checker.collect_status
+      @logger.info "Current worker status: #{worker_status}"
+      worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
         on_worker_available(w)
       end
     end
@@ -158,7 +160,7 @@ class Dispatcher < BaseServer
       @resource_mutex.synchronize {
         until @job_worker_queues[job_id].empty? do
           worker = @job_worker_queues[job_id].pop
-          @status_checker.release worker
+          @status_checker.release_worker worker
         end
         @job_worker_queues.delete(job_id)
       }

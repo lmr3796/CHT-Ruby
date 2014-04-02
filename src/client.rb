@@ -56,6 +56,7 @@ class Client
     thread_id_list.each{ |thread_id|
       @thread_pool.join(thread_id)
     }
+    @logger.info "Job #{job_id} is done"
     @dispatcher.job_done(job_id)
   end
   private :run_job
@@ -64,9 +65,9 @@ class Client
     # Convert to a job list if a single job passed
     jobs = [jobs] unless jobs.is_a? Array
     jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a? Job}
+    @logger.info "Submitting #{jobs.size} job(s)"
     job_id_list = @dispatcher.submit_jobs(jobs)
-    raise 'Submission failed' if !job_id_list or !job_id_list.is_a? Array
-
+    (@logger.info "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index{|job_id, index|
