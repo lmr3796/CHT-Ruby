@@ -20,7 +20,7 @@ delay = ARGV.shift.to_f
 wc_job = Job.new('word count')
 bzip2_job = Job.new('bzip2')
 h264_job = Job.new('h264')
-for i in 0...20 do
+for i in 0...3 do
   wc_job.add_task Task.new(RUN_PATH + '/word_count.sh')
 end
 for i in 0...10 do
