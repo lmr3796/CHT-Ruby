@@ -8,10 +8,11 @@ class DecisionMaker < BaseServer
     @status_checker = status_checker
   end
   def schedule_job(job_list, worker_status, arg={})
-    @logger.info 'Rescheduling'
+    job_list.each{|v| p v}
+    @logger.info "Rescheduling on #{job_list.keys}"
     # Possibly something to be done with arg in the future :)
     result = @algorithm.schedule_job job_list, worker_status, :current_schedule => arg[:current_schedule]
-    @logger.info "Result: #{result}"
+    @logger.info "Scheduled result: #{result}"
     return result
   end
 end

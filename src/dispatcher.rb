@@ -4,7 +4,9 @@ require 'securerandom'
 require_relative 'base_server'
 require_relative 'decision_maker'
 require_relative 'common/read_write_lock_hash'
+
 class Dispatcher < BaseServer
+  attr_writer :status_checker, :decision_maker
 
   class JobList < ReadWriteLockHash
     def initialize(logger)
@@ -24,6 +26,7 @@ class Dispatcher < BaseServer
         @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
       end
       def publish_job_deleted(job_id)
+        @logger.info "Publishing deletion of #{job_id}"
         @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
       end
     end
@@ -36,14 +39,15 @@ class Dispatcher < BaseServer
       publish_job_submitted [job_id]
     end
 
-    def delete(job_id)
-      super
+    def delete(*args)
+      super  # The job_id must be passed if super is not the first statement....
+      job_id = args[0]
       publish_job_deleted job_id
     end
 
-    def merge!(to_add, &block)
+    def merge!(*args)
       super
-      publish_job_submitted @underlying_hash.keys
+      publish_job_submitted(keys)
       return self
     end
 
@@ -59,6 +63,7 @@ class Dispatcher < BaseServer
       @decision_maker = arg[:decision_maker]
       @status_checker = arg[:status_checker]
       @job_list = job_list
+      @job_list.subscribe_job_list_change(self)
       @logger = arg[:logger]
     end
 
@@ -77,22 +82,33 @@ class Dispatcher < BaseServer
       }
       @logger.info 'Updated schedule successfully'
     end
-  end
 
-  attr_writer :status_checker, :decision_maker
+    module JobListChangeObserver
+      # Observer callbacks
+      def on_job_submitted(job_id_list)
+        schedule_job
+      end
+      def on_job_deleted(job_id)
+        @worker_job_table.delete_if{|w,j| j == job_id}
+        schedule_job
+      end
+    end
+    include JobListChangeObserver
+
+  end
 
   def initialize(arg={})
     super arg[:logger]
     @resource_mutex = Mutex.new
     @job_worker_queues = ReadWriteLockHash.new
     @job_list = JobList.new @logger
-    @job_list.subscribe_job_list_change(self)
     @status_checker = arg[:status_checker]
     @decision_maker = arg[:decision_maker]
     @schedule_manager = ScheduleManager.new @job_list, 
       :status_checker => @status_checker,
       :decision_maker => @decision_maker,
       :logger => @logger
+    @job_list.subscribe_job_list_change(self) # Make sure it subscribes after schedule manager
   end
 
   # Client APIs
@@ -104,7 +120,6 @@ class Dispatcher < BaseServer
     @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
-
   def require_worker(job_id)
     # TODO: what if queue popped but not used? ====> more communications
     @logger.info "Worker requirement for #{job_id} issued"
@@ -112,8 +127,8 @@ class Dispatcher < BaseServer
     @logger.info "Worker #{worker} assigned to #{job_id}"
     return worker
   end
-
   def job_done(job_id)
+    @logger.info "#{job_id} is done"
     @job_list.delete(job_id)
   end
 
@@ -122,30 +137,31 @@ class Dispatcher < BaseServer
     @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize {
       next_job_assigned = @schedule_manager.worker_job_table[worker]
+      @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
       return unless @job_worker_queues[next_job_assigned]
-      @logger.debug "Pushing #{worker} to #{next_job_assigned}"
       @job_worker_queues[next_job_assigned].push(worker)
-      @logger.debug "Pushed #{worker} to #{next_job_assigned}"
       @status_checker.occupy_worker worker
     }
   end
 
 
   # General APIs
-  def worker_status()
-    # TODO: implement this
-    raise NotImplementedError
+  module GeneralInterface
+    def worker_status()
+      # TODO: implement this
+      raise NotImplementedError
+    end
+    def worker_uri(worker)
+      return @status_checker.worker_uri worker
+    end
   end
-  def worker_uri(worker)
-    return @status_checker.worker_uri worker
-  end
+  include GeneralInterface
 
   module JobListChangeObserver
     # Observer callbacks
     def on_job_submitted(job_id_list)
       job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
       # TODO: might need to refactor to observers...
-      @schedule_manager.schedule_job
       @logger.info "Collecting status from status checker"
       worker_status = @status_checker.collect_status
       @logger.info "Current worker status: #{worker_status}"
@@ -157,13 +173,13 @@ class Dispatcher < BaseServer
     def on_job_deleted(job_id)
       # Clear the entry in @job_worker_queues[job_id]
       # Release nodes first
-      @resource_mutex.synchronize {
-        until @job_worker_queues[job_id].empty? do
-          worker = @job_worker_queues[job_id].pop
-          @status_checker.release_worker worker
-        end
-        @job_worker_queues.delete(job_id)
-      }
+      @logger.debug "Clearing #{job_id} worker queue"
+      until @job_worker_queues[job_id].empty? do
+        worker = @job_worker_queues[job_id].pop
+        @status_checker.release_worker worker
+      end
+      @logger.debug "Remove #{job_id} worker queue"
+      @job_worker_queues.delete job_id
       # TODO: might need to refactor to observers...
       @schedule_manager.schedule_job
       @status_checker.collect_status

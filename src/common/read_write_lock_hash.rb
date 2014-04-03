@@ -1,52 +1,29 @@
 require_relative 'read_write_lock'
 
-class ReadWriteLockHash
-
-  def initialize(arg={})
-    @underlying_hash = arg.clone
+class ReadWriteLockHash < Hash
+  def initialize(*args)
+    super(*args)
     @read_write_lock = ReadWriteLock.new
   end
-
-  def [](key)
-    value = nil
-    @read_write_lock.with_read_lock{
-      value = @underlying_hash[key]
-    }
-    return value
+  def [](*args)
+    @read_write_lock.with_read_lock{return super(*args)}
   end
-  def keys
-    @read_write_lock.with_read_lock{return @underlying_hash.keys}
+  def []=(*args)
+    @read_write_lock.with_write_lock{return super(*args)}
   end
-
-  def []=(key, value)
-    @read_write_lock.with_write_lock{
-      @underlying_hash[key] = value
-    }
+  def delete(*args)
+    @read_write_lock.with_write_lock{return super(*args)}
   end
-
-  def delete(key)
-    @read_write_lock.with_write_lock{
-      @underlying_hash.delete(key)
-    }
+  def delete_if(*args)
+    @read_write_lock.with_write_lock{return super(*args)}
   end
-
-  def keys()
-    return @underlying_hash.keys
+  def keys(*args)
+    @read_write_lock.with_read_lock{return super(*args)}
   end
-
-  def merge(hash, &block)
-    res = nil
-    @read_write_lock.with_read_lock{
-      res = @underlying_hash.merge(hash, &block)
-    }
-    return res
+  def merge(*args)
+    @read_write_lock.with_read_lock{return super(*args)}
   end
-
-  def merge!(hash, &block)
-    @read_write_lock.with_write_lock{
-      @underlying_hash.merge!(hash, &block)
-    }
-    return self
+  def merge!(*args)
+    @read_write_lock.with_write_lock{return super(*args)}
   end
-
 end
