@@ -1,5 +1,5 @@
 require 'open3'
-require 'logger'
+require 'logger/colors'
 require 'time'
 require 'thread'
 require 'securerandom'

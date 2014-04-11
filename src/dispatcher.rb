@@ -141,6 +141,7 @@ class Dispatcher < BaseServer
       return unless @job_worker_queues[next_job_assigned]
       @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker
+      @logger.debug "#{next_job_assigned} queue has #{@job_worker_queues[next_job_assigned].size} available workers, #{@job_worker_queues[next_job_assigned].num_waiting} threads waiting it"
     }
   end
 

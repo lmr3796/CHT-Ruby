@@ -1,5 +1,5 @@
 require 'drb'
-require 'logger'
+require 'logger/colors'
 require 'thread'
 require 'time'
 require 'sync'
@@ -34,7 +34,7 @@ class Client
   end
 
   def wait_all()
-    @thread_id_list.each{ |thread_id| wait(thread_id)}
+    @thread_id_list.each{|thread_id| wait(thread_id)}
   end
 
   def wait(thread_id)
@@ -46,8 +46,9 @@ class Client
     thread_id_list = []
     until task_queue.empty? do
       task = task_queue.pop
+      @logger.debug "#{job_id} waiting for worker"
       worker = @dispatcher.require_worker(job_id)
-      @logger.info "Worker #{worker} assigned"
+      @logger.debug "#{job_id} assigned with worker #{worker}"
       thread_id_list << @thread_pool.schedule {
         #TODO: Task execution failure???
         run_task_on_worker(task, job_id, worker)
@@ -82,12 +83,12 @@ class Client
 
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
-    @logger.info "Assign a task of #{job_id} to worker #{worker}"
+    @logger.info "#{job_id} popped a task to worker #{worker}"
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
     res = worker_server.run_task(task, job_id)
-    @logger.info "Task of #{job_id} returned from worker #{worker} in #{res[:elapsed]} seconds"
+    @logger.info "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
     worker_server.release
-    @logger.info "Release worker #{worker}"
+    @logger.info "#{job_id} released worker #{worker}"
   end
   private :run_task_on_worker
 

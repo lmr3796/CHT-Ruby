@@ -1,4 +1,4 @@
-require 'logger'
+require 'logger/colors'
 require_relative 'server_monitor'
 
 class BaseServer
