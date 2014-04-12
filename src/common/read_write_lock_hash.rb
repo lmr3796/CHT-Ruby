@@ -5,6 +5,9 @@ class ReadWriteLockHash < Hash
     super(*args)
     @read_write_lock = ReadWriteLock.new
   end
+  def has_key?(*args)
+    @read_write_lock.with_read_lock{return super(*args)}
+  end
   def [](*args)
     @read_write_lock.with_read_lock{return super(*args)}
   end

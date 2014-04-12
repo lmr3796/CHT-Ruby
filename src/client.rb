@@ -46,9 +46,9 @@ class Client
     thread_id_list = []
     until task_queue.empty? do
       task = task_queue.pop
-      @logger.debug "#{job_id} waiting for worker"
+      @logger.info "#{job_id} waiting for worker"
       worker = @dispatcher.require_worker(job_id)
-      @logger.debug "#{job_id} assigned with worker #{worker}"
+      @logger.info "#{job_id} assigned with worker #{worker}"
       thread_id_list << @thread_pool.schedule {
         #TODO: Task execution failure???
         run_task_on_worker(task, job_id, worker)

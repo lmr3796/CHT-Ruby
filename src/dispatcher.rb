@@ -122,9 +122,9 @@ class Dispatcher < BaseServer
   end
   def require_worker(job_id)
     # TODO: what if queue popped but not used? ====> more communications
-    @logger.info "Worker requirement for #{job_id} issued"
+    @logger.info "#{job_id} requires a worker"
     worker = @job_worker_queues[job_id].pop()
-    @logger.info "Worker #{worker} assigned to #{job_id}"
+    @logger.info "#{job_id} gets worker #{worker}"
     return worker
   end
   def job_done(job_id)
@@ -158,10 +158,22 @@ class Dispatcher < BaseServer
   end
   include GeneralInterface
 
+  def log_job_worker_queue
+      queue_status = @job_worker_queues.map{|k,v| [k, "#{v.size} wrks, #{v.num_waiting} waiting"]}
+      @logger.warn "Current queue status: #{queue_status}"
+  end
+
   module JobListChangeObserver
     # Observer callbacks
     def on_job_submitted(job_id_list)
-      job_id_list.each {|job_id| @job_worker_queues[job_id] = Queue.new}
+      job_id_list.each do |job_id|
+        # NEVER directly cover it with new queue, threads are waiting on the old queus!!!!!!
+        if @job_worker_queues.has_key? job_id
+          @job_worker_queues[job_id].clear
+        else
+          @job_worker_queues[job_id] = Queue.new 
+        end
+      end
       # TODO: might need to refactor to observers...
       @logger.info "Collecting status from status checker"
       worker_status = @status_checker.collect_status
