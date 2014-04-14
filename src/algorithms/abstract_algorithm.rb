@@ -9,7 +9,7 @@ module SchedulingAlgorithm
     def initialize()
       raise "Cannot directly instantiate an AbstractAlgorithm." if self.class == AbstractAlgorithm
     end
-    def schedule_job(job_list, worker_status, arg={})
+    def schedule_job(job_list, worker_status, current_timestamp, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
       # current_schedule: {job_id => [worker_id, ...]}

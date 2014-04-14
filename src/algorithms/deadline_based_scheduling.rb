@@ -4,7 +4,7 @@ module SchedulingAlgorithm
   class DeadlineBasedScheduling
     def initialize()
     end
-    def schedule_job(job_list, worker_status, arg={})
+    def schedule_job(job_list, worker_status, current_timestamp, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
       # current_schedule: {job_id => [worker_id, ...]}
@@ -18,18 +18,21 @@ module SchedulingAlgorithm
         break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id]}
-        assigned_worker_offset, assigned_worker_size = get_required_worker_range(job, worker_by_throughput)
+        assigned_worker_offset, assigned_worker_size = get_required_worker_range(job, worker_by_throughput, current_timestamp)
         schedule_result[job_id] = worker_by_throughput.slice!(assigned_worker_offset, assigned_worker_size)
         remaining_worker = worker_by_throughput
       }
       return schedule_result
     end
 
-    def get_required_worker_range(job, worker_by_throughput)
+    def get_required_worker_range(job, worker_by_throughput, current_timestamp)
+      # If the deadline is already passed, assign as many as workers for the job.
+      if current_timestamp > job.deadline
+        return 0, [worker_by_throughput.size, job.task.size].min
       # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
-      required_throughput = job.task.size * 1.0 / job.deadline
+      required_throughput = job.task.size * 1.0 / (current_timestamp - job.deadline)
       worker_by_throughput.each{ |worker_id|
         break if total_throughput > required_throughput
         break if needed_worker == job.task.size

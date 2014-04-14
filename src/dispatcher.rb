@@ -70,7 +70,7 @@ class Dispatcher < BaseServer
     def schedule_job()
       @logger.info 'Updating schedule'
       @lock.with_write_lock {
-        @job_worker_table = @decision_maker.schedule_job(@job_list, @status_checker.worker_status)  # {job_id => [worker1, worker2...]}
+        @job_worker_table = @decision_maker.schedule_job(@job_list, @status_checker.worker_status, Time.now.getutc)  # {job_id => [worker1, worker2...]}
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
           # TODO: maybe only update the table with those changed
