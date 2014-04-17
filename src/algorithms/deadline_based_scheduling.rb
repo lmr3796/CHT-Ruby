@@ -13,7 +13,7 @@ module SchedulingAlgorithm
       # Return: {job_id => [worker_id, ...]}
       # Concept: make jobs with higher priority meet their deadlines
       # Priority represented by smaller number is of higher priority.
-      current_timestamp = Time.now
+      current_timestamp = Time.now  # Should be consistent within the whole schedule process
       job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
       schedule_result = {}
@@ -31,10 +31,11 @@ module SchedulingAlgorithm
     def get_required_worker_range(job, worker_by_throughput, current_timestamp)
       # If the deadline is already passed, assign as many as workers for the job.
       return 0, [worker_by_throughput.size, job.task.size].min if current_timestamp > job.deadline
+
       # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
-      required_throughput = job.task.size * 1.0 / (current_timestamp - job.deadline)
+      required_throughput = job.task.size * 1.0 / (job.deadline - current_timestamp)
       worker_by_throughput.each{ |worker_id|
         break if total_throughput > required_throughput
         break if needed_worker == job.task.size
