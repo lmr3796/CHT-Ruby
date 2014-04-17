@@ -9,14 +9,27 @@ class Job
     @deadline = deadline
     @task_running_time_on_worker = task_running_time_on_worker
   end
-
   def add_task(t)
     @task << t
   end
-
   def clear_task()
     @task = []
   end
+
+  def deadline=(deadline)
+    raise ArgumentError unless deadline.is_a? Time
+    @deadline = deadline
+  end
+
+  def marshal_dump()
+    [@task, @priority, @deadline, @task_running_time_on_worker]
+  end
+
+  def marshal_load(array)
+    @task, @priority, @deadline, @task_running_time_on_worker = array
+    @deadline = Time.at(deadline)
+  end
+
 end
 
 class Task

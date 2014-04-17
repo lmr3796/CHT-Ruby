@@ -14,7 +14,7 @@ H264_PER_TASK_RUNNING_TIME = 54
 WC_PER_TASK_RUNNING_TIME = 7
 
 
-total_deadline = ARGV.shift.to_f
+total_deadline = Time.now + ARGV.shift.to_f
 delay = ARGV.shift.to_f
 
 wc_job = Job.new('word count')
