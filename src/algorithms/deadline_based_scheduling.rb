@@ -13,6 +13,7 @@ module SchedulingAlgorithm
       # Return: {job_id => [worker_id, ...]}
       # Concept: make jobs with higher priority meet their deadlines
       # Priority represented by smaller number is of higher priority.
+
       current_timestamp = Time.now  # Should be consistent within the whole schedule process
       job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
