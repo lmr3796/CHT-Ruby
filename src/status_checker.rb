@@ -3,6 +3,7 @@ require 'drb'
 require_relative 'base_server'
 require_relative 'worker'
 require_relative 'common/read_write_lock'
+require_relative 'common/routine' 
 
 class StatusChecker < BaseServer
   def worker_status
@@ -18,7 +19,13 @@ class StatusChecker < BaseServer
     @worker_table = worker_table.clone
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @dispatcher = arg[:dispatcher]
-    collect_status
+    if arg[:update_period]
+      Routine.every_n_seconds(arg[:update_period]) do
+        collect_status
+      end
+    else
+      collect_status
+    end
   end
   def release_worker(worker)
     @lock.with_write_lock {
