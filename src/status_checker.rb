@@ -1,4 +1,5 @@
 require 'drb'
+require 'eventmachine'
 
 require_relative 'base_server'
 require_relative 'worker'
@@ -19,6 +20,15 @@ class StatusChecker < BaseServer
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @dispatcher = arg[:dispatcher]
     collect_status
+    if arg[:update_period]
+      Thread.new do
+        EventMachine.run do
+          EventMachine.add_periodic_timer(arg[:update_period]) do
+            collect_status
+          end
+        end
+      end
+    end
   end
   def release_worker(worker)
     @lock.with_write_lock {
