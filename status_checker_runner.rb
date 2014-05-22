@@ -37,7 +37,7 @@ end
 # Initiate and run the worker as a DRb object
 workers = Hash[CHT_Configuration::Address::WORKERS.map{|n,addr| [n, DRbObject.new_with_uri(CHT_Configuration::Address::druby_uri(addr))]}]
 dispatcher = DRbObject.new_with_uri options[:dispatcher_addr]
-status_checker = StatusChecker.new workers, {:dispatcher => dispatcher, :update_period => CHT_Configuration::STATUS_CHECKER_UPDATE_PERIOD}
+status_checker = StatusChecker.new workers, :dispatcher => dispatcher
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, status_checker

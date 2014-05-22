@@ -33,6 +33,4 @@ module CHT_Configuration
       return "druby://#{socket[:address]}:#{socket[:port]}"
     end
   end
-
-  STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
 end
