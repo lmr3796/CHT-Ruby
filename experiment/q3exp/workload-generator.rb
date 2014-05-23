@@ -1,5 +1,4 @@
 module WorkloadParser
-
   def workload_from_file(file)
     lines = file.readlines.map{|l| l.strip}
     jobs = []
@@ -18,6 +17,5 @@ module WorkloadParser
     end
     return jobs
   end
-
   module_function :workload_from_file
 end
