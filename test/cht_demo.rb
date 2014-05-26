@@ -8,7 +8,7 @@ require_relative '../src/client'
 require_relative '../src/job'
 
 
-RUN_PATH='/home/lmr3796/CHT-Ruby/test/spec_job_scripts'
+RUN_PATH=`echo $HOME`+'/CHT-Ruby/test/spec_job_scripts'
 BZIP2_PER_TASK_RUNNING_TIME = 42
 H264_PER_TASK_RUNNING_TIME = 80
 WC_PER_TASK_RUNNING_TIME = 10
