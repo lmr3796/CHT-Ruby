@@ -22,4 +22,4 @@ doc/
 *.pid
 
 # Config file
-config/config.rb
+/config/config.rb
