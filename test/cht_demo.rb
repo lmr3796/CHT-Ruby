@@ -9,9 +9,9 @@ require_relative '../src/job'
 
 
 RUN_PATH=`echo $HOME`+'/CHT-Ruby/test/spec_job_scripts'
-BZIP2_PER_TASK_RUNNING_TIME = 42
-H264_PER_TASK_RUNNING_TIME = 80
-WC_PER_TASK_RUNNING_TIME = 10
+BZIP2_PER_TASK_RUNNING_TIME = 47
+H264_PER_TASK_RUNNING_TIME = 32
+WC_PER_TASK_RUNNING_TIME = 21
 
 
 total_deadline = Time.now + ARGV.shift.to_f
@@ -21,13 +21,13 @@ wc_job = Job.new('word count')
 bzip2_job = Job.new('bzip2')
 h264_job = Job.new('h264')
 for i in 0...3 do
-  wc_job.add_task Task.new(RUN_PATH + '/word_count.sh')
+  wc_job.add_task Task.new(RUN_PATH + '/word_count.sh test')
 end
 for i in 0...10 do
-  bzip2_job.add_task Task.new(RUN_PATH + '/bzip2.sh')
+  bzip2_job.add_task Task.new(RUN_PATH + '/bzip2.sh test')
 end
 for i in 0...4 do
-  h264_job.add_task Task.new(RUN_PATH + '/h264.sh')
+  h264_job.add_task Task.new(RUN_PATH + '/h264.sh test')
 end
 
 CHT_Configuration::Address::WORKERS.keys.each do |worker|
