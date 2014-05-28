@@ -132,6 +132,12 @@ class Dispatcher < BaseServer
     @logger.info "#{job_id} is done"
     @job_list.delete(job_id)
   end
+  def reschedule()
+    @schedule_manager.schedule_job
+  end
+  def on_status_collected()
+    raise NotImplmentedError
+  end
 
   # Worker APIs
   def on_worker_available(worker)
@@ -140,9 +146,11 @@ class Dispatcher < BaseServer
       next_job_assigned = @schedule_manager.worker_job_table[worker]
       @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
       return unless @job_worker_queues[next_job_assigned]
+      waiting_workers_of_next_job_assigned = @job_worker_queues[next_job_assigned].size
+      waiting_threads_of_next_job_assigned = @job_worker_queues[next_job_assigned].num_waiting
       @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker
-      @logger.debug "#{next_job_assigned} queue has #{@job_worker_queues[next_job_assigned].size} available workers, #{@job_worker_queues[next_job_assigned].num_waiting} threads waiting it"
+      @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
     }
   end
 

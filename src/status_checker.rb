@@ -25,6 +25,8 @@ class StatusChecker < BaseServer
         EventMachine.run do
           EventMachine.add_periodic_timer(arg[:update_period]) do
             collect_status
+            @logger.info 'Asked to reschedule'
+            @dispatcher.reschedule
           end
         end
       end
