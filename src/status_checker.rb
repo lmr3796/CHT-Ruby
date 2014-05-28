@@ -26,34 +26,45 @@ class StatusChecker < BaseServer
           EventMachine.add_periodic_timer(arg[:update_period]) do
             collect_status
             @logger.info 'Asked to reschedule'
-            @dispatcher.reschedule
+            begin
+              @dispatcher.reschedule
+            rescue
+              @logger.error "Error reaching dispatcher"
+            end
           end
         end
       end
     end
   end
+  def register_worker(worker)
+    @lock.with_write_lock {
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
+      @logger.info "Worker: #{worker} registered; set to AVAILABLE"
+    }
+    @logger.info 'Asked to reschedule'
+    begin
+      @dispatcher.reschedule
+    rescue
+      @logger.error "Error reaching dispatcher"
+    end
+    @dispatcher.on_worker_available(worker)
+  end
   def release_worker(worker)
     @lock.with_write_lock {
-      @worker_status_table[worker] = Worker::STATUS::AVAILABLE
-      @worker_table[worker].status = Worker::STATUS::AVAILABLE
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
       @logger.info "Released worker: #{worker}"
     }
     @dispatcher.on_worker_available(worker)
   end
   def occupy_worker(worker)
     @lock.with_write_lock {
-      @worker_status_table[worker] = Worker::STATUS::OCCUPIED
-      @worker_table[worker].status = Worker::STATUS::OCCUPIED
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
       @logger.info "Occupied worker: #{worker}"
     }
   end
   def worker_running(worker)
     @lock.with_write_lock {
-      @logger.debug @worker
-      @logger.debug @worker_status_table
-      @logger.debug @worker_table
-      @worker_status_table[worker] = Worker::STATUS::BUSY
-      @worker_table[worker].status = Worker::STATUS::BUSY
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
       @logger.info "Mark running worker: #{worker}"
     }
   end
@@ -66,7 +77,7 @@ class StatusChecker < BaseServer
           status = @worker_table[w].status
         rescue => e
           @logger.warn "Exception #{e} when checking status of worker #{w}"
-          @logger.debug e.backtrace
+          @logger.debug e.to_s
           status = Worker::STATUS::DOWN
         ensure
           @logger.info "#{w} is #{status}"
@@ -74,7 +85,13 @@ class StatusChecker < BaseServer
         end
       end
     end
-    return worker_status
+    workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
+      begin
+        @dispatcher.on_worker_available w
+      rescue
+        @logger.error "Error reaching dispatcher"
+      end
+    end
   end
   # TODO: worker registration at runtime?
 end

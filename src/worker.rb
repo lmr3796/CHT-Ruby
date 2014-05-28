@@ -27,6 +27,11 @@ class Worker < BaseServer
     @status = STATUS::AVAILABLE
   end
 
+  def register()
+    @logger.info "Notifies status checker for coming"
+    @status_checker.register_worker @name
+  end
+
   def status=(s)
     raise ArgumentError if !STATUS::constants.include? s
     @logger.info "Worker status set to #{s}"

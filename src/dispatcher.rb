@@ -135,9 +135,6 @@ class Dispatcher < BaseServer
   def reschedule()
     @schedule_manager.schedule_job
   end
-  def on_status_collected()
-    raise NotImplmentedError
-  end
 
   # Worker APIs
   def on_worker_available(worker)
@@ -148,6 +145,7 @@ class Dispatcher < BaseServer
       return unless @job_worker_queues[next_job_assigned]
       waiting_workers_of_next_job_assigned = @job_worker_queues[next_job_assigned].size
       waiting_threads_of_next_job_assigned = @job_worker_queues[next_job_assigned].num_waiting
+      @logger.debug "Worker #{worker} pushed to the queue of #{next_job_assigned.inspect}"
       @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker
       @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
@@ -185,7 +183,8 @@ class Dispatcher < BaseServer
       end
       # TODO: might need to refactor to observers...
       @logger.info "Collecting status from status checker"
-      worker_status = @status_checker.collect_status
+      @status_checker.collect_status
+      worker_status = @status_checker.worker_status
       @logger.info "Current worker status: #{worker_status}"
       worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
         on_worker_available(w)
