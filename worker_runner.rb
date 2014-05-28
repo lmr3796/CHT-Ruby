@@ -17,7 +17,7 @@ OptionParser.new do |opts|
   opts.on('-n name', '--name name', 'Specify server name. \
           If the name exists in the configuration will use corresponding settings') do |name|
     options[:name] = name
-    options[:port] = CHT_Configuration::Address::WORKERS[:port]
+    options[:port] = CHT_Configuration::Address::WORKERS[name][:port]
   end
 
   # Specify the port to listen
