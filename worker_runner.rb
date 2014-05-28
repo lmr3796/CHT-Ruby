@@ -1,6 +1,7 @@
 #! /usr/bin/env ruby
 
 require 'drb'
+require 'logger/colors'
 require 'optparse'
 require 'securerandom'
 require 'socket'
@@ -44,7 +45,9 @@ if !ARGV.empty?
 end
 
 # Initiate and run the worker as a DRb object
-worker = Worker.new options[:name]
+logger = Logger.new(STDERR)
+logger.level = CHT_Configuration::LOGGER_LEVEL
+worker = Worker.new options[:name], :logger=>logger
 status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
 worker.status_checker = DRbObject.new_with_uri status_checker_druby_uri
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])

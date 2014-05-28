@@ -1,3 +1,5 @@
+require 'logger/colors'
+
 module CHT_Configuration
   # Specifying algorithms
   module Algorithm
@@ -47,4 +49,5 @@ module CHT_Configuration
   end
 
   STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
+  LOGGER_LEVEL = Logger::DEBUG # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]
 end

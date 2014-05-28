@@ -1,6 +1,7 @@
 #! /usr/bin/env ruby
 
 require 'drb'
+require 'logger/colors'
 require 'optparse'
 require 'securerandom'
 require 'socket'
@@ -43,9 +44,11 @@ if !ARGV.empty?
 end
 
 # Initiate and run the decision maker as a DRb object
+logger = Logger.new(STDERR)
+logger.level = CHT_Configuration::LOGGER_LEVEL
 algorithm = options[:algo].new
 status_checker = DRbObject.new_with_uri options[:status_checker]
-decision_maker = DecisionMaker.new algorithm, status_checker
+decision_maker = DecisionMaker.new algorithm, status_checker, :logger=>logger
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, decision_maker

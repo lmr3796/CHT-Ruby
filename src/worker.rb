@@ -4,9 +4,10 @@ require 'time'
 require 'thread'
 require 'securerandom'
 
+require_relative 'base_server'
 require_relative 'job.rb'
 
-class Worker
+class Worker < BaseServer
   attr_reader :name, :status, :id
   attr_writer :status_checker
 
@@ -18,12 +19,12 @@ class Worker
     BUSY       = :BUSY        # Running a task
   end
 
-  def initialize(name, logger=Logger.new(STDERR))
+  def initialize(name, arg={})
+    super arg[:logger]
     @id = SecureRandom::uuid()
     @name = name
     @lock = Mutex.new
     @status = STATUS::AVAILABLE
-    @logger = logger
   end
 
   def status=(s)

@@ -20,6 +20,3 @@ doc/
 *.swp
 *.log
 *.pid
-
-# Config file
-/config/config.rb
