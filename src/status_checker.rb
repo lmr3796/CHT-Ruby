@@ -4,8 +4,16 @@ require 'eventmachine'
 require_relative 'base_server'
 require_relative 'worker'
 require_relative 'common/read_write_lock'
+require_relative 'common/read_write_lock_hash'
 
 class StatusChecker < BaseServer
+
+  def job_running_time()
+    @lock.with_read_lock{return Hash[@job_running_time.clone]}
+  end
+  def worker_avg_running_time()
+    @lock.with_read_lock{return @worker_avg_running_time.clone}
+  end
   def worker_status
     @lock.with_read_lock{return @worker_status_table.clone}
   end
@@ -16,8 +24,10 @@ class StatusChecker < BaseServer
     super arg[:logger]
     # TODO: make up a worker table
     @lock = ReadWriteLock.new
+    @job_running_time = ReadWriteLockHash.new
     @worker_table = worker_table.clone
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
+    @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
     if arg[:update_period]
@@ -28,8 +38,10 @@ class StatusChecker < BaseServer
             @logger.info 'Asked to reschedule'
             begin
               @dispatcher.reschedule
-            rescue
-              @logger.error "Error reaching dispatcher"
+            rescue => e
+              @logger.error "Error contacting dispatcher for reschedule"
+              @logger.debug e.message
+              @logger.debug e.backtrace.join("\n")
             end
           end
         end
@@ -44,8 +56,10 @@ class StatusChecker < BaseServer
     @logger.info 'Asked to reschedule'
     begin
       @dispatcher.reschedule
-    rescue
+    rescue => e
       @logger.error "Error reaching dispatcher"
+      @logger.debug e.message
+      @logger.debug e.backtrace.join("\n")
     end
     @dispatcher.on_worker_available(worker)
   end
@@ -73,8 +87,10 @@ class StatusChecker < BaseServer
     @lock.with_write_lock do
       workers.each do |w|
         status = nil
+        avg_time = nil
         begin
           status = @worker_table[w].status
+          avg_time = @worker_table[w].avg_running_time
         rescue => e
           @logger.warn "Exception #{e} when checking status of worker #{w}"
           @logger.debug e.to_s
@@ -82,16 +98,31 @@ class StatusChecker < BaseServer
         ensure
           @logger.info "#{w} is #{status}"
           @worker_status_table[w] = status 
+          @worker_avg_running_time[w] = avg_time
         end
       end
     end
     workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
       begin
         @dispatcher.on_worker_available w
-      rescue
+      rescue => e
         @logger.error "Error reaching dispatcher"
+        @logger.debug e.backtrace
       end
     end
   end
-  # TODO: worker registration at runtime?
+
+  def register_job(job_id)
+    @lock.with_write_lock{@job_running_time[job_id] = []}
+  end
+  def delete_job(job_id)
+    @lock.with_write_lock{@job_running_time.delete job_id}
+  end
+
+  def log_running_time(job_id, time)
+    raise ArgumentError unless time.is_a? Float
+    return unless @job_running_time.has_key? job_id
+    @lock.with_write_lock{@job_running_time[job_id] << time} # Necessary even it's a ReadWriteLockHash
+  end
+
 end

@@ -8,8 +8,10 @@ require_relative 'base_server'
 require_relative 'job.rb'
 
 class Worker < BaseServer
-  attr_reader :name, :status, :id
+  attr_reader :name, :status, :id, :avg_running_time
   attr_writer :status_checker
+
+  LEARNING_RATE = 0.2
 
   module STATUS
     DOWN       = :DOWN
@@ -25,6 +27,7 @@ class Worker < BaseServer
     @name = name
     @lock = Mutex.new
     @status = STATUS::AVAILABLE
+    @avg_running_time = nil
   end
 
   def register()
@@ -36,6 +39,11 @@ class Worker < BaseServer
     raise ArgumentError if !STATUS::constants.include? s
     @logger.info "Worker status set to #{s}"
     @status = s
+  end
+
+  def log_running_time(job_id, time)
+    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
+    @status_checker.log_running_time
   end
 
   def release()

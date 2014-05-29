@@ -1,7 +1,7 @@
 
 class Job
   attr_reader :task
-  attr_accessor :priority, :deadline, :task_running_time_on_worker
+  attr_accessor :priority, :deadline, :task_running_time_on_worker, :avg_task_running_time
   def initialize(priority=0, deadline=0, task_running_time_on_worker={})
     @task = []
     # Priority represented by smaller number is of higher priority

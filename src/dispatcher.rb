@@ -71,7 +71,14 @@ class Dispatcher < BaseServer
       @logger.info 'Updating schedule'
       @lock.with_write_lock {
         worker_can_be_scheduled = @status_checker.worker_status.delete_if{|w,s| s == Worker::STATUS::DOWN} # Don't schedule on downed workers
-        @job_worker_table = @decision_maker.schedule_job(@job_list, worker_can_be_scheduled)  # {job_id => [worker1, worker2...]}
+        job_running_time = @status_checker.job_running_time
+        worker_avg_running_time = @status_checker.worker_avg_running_time
+
+        # {job_id => [worker1, worker2...]}
+        @job_worker_table = @decision_maker.schedule_job @job_list, worker_can_be_scheduled,
+          :job_running_time=>job_running_time, :worker_avg_running_time => worker_avg_running_time
+
+
         @worker_job_table = ReadWriteLockHash.new
         @job_worker_table.keys.each { |job_id|
           # TODO: maybe only update the table with those changed
@@ -166,8 +173,8 @@ class Dispatcher < BaseServer
   include GeneralInterface
 
   def log_job_worker_queue
-      queue_status = @job_worker_queues.map{|k,v| [k, "#{v.size} wrks, #{v.num_waiting} waiting"]}
-      @logger.warn "Current queue status: #{queue_status}"
+    queue_status = @job_worker_queues.map{|k,v| [k, "#{v.size} wrks, #{v.num_waiting} waiting"]}
+    @logger.warn "Current queue status: #{queue_status}"
   end
 
   module JobListChangeObserver
@@ -179,6 +186,7 @@ class Dispatcher < BaseServer
           @job_worker_queues[job_id].clear
         else
           @job_worker_queues[job_id] = Queue.new 
+          @status_checker.register_job job_id # Can't make this an observer in status checker for dependency
         end
       end
       # TODO: might need to refactor to observers...
@@ -203,6 +211,7 @@ class Dispatcher < BaseServer
       @job_worker_queues.delete job_id
       # TODO: might need to refactor to observers...
       @schedule_manager.schedule_job
+      @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
       @status_checker.collect_status
       @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
         on_worker_available(w)
