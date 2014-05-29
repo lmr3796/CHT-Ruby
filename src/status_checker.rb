@@ -113,16 +113,22 @@ class StatusChecker < BaseServer
   end
 
   def register_job(job_id)
-    @lock.with_write_lock{@job_running_time[job_id] = []}
+    @lock.with_write_lock do
+      @logger.info "Job #{job_id} registered for recording"
+      @job_running_time[job_id] = []
+    end
   end
   def delete_job(job_id)
-    @lock.with_write_lock{@job_running_time.delete job_id}
+    @lock.with_write_lock do
+      @logger.info "Job #{job_id} removed from recording"
+      @job_running_time.delete job_id
+    end
   end
 
   def log_running_time(job_id, time)
     raise ArgumentError unless time.is_a? Float
-    return unless @job_running_time.has_key? job_id
     @lock.with_write_lock{@job_running_time[job_id] << time} # Necessary even it's a ReadWriteLockHash
+    return 
   end
 
 end
