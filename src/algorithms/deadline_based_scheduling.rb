@@ -59,8 +59,6 @@ module SchedulingAlgorithm
         break if needed_worker == job.task.size
         needed_worker += 1
 
-        @logger.warn "#{__FILE__}: #{__LINE__}\t#{job.avg_task_running_time.inspect}"
-        @logger.warn "#{__FILE__}: #{__LINE__}\t#{job.task_running_time_on_worker.inspect}"
         # Try to estimate run time then get workers to occupy
         if job.avg_task_running_time != nil && job.avg_task_running_time > 0 
           @logger.info "Estimate run time using average task execution time = #{job.avg_task_running_time} sec."

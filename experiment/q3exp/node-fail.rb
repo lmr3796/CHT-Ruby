@@ -15,8 +15,8 @@ rescue
 end
 
 now = Time.now
-deadlines = ARGV.map {|i| now Float(i) rescue nil}
-if deadlines.size == 0 or deadlines.select{|d| d == nil or !d.is_a? now}.size > 0
+deadlines = ARGV.map {|i| now + Float(i) rescue nil}
+if deadlines.size == 0 or deadlines.select{|d| d == nil or !d.is_a? Time}.size > 0
   puts "Can't parse deadlines from ARGV."
   exit(-1)
 end
@@ -26,12 +26,14 @@ jobs = workload.map do |i|
   j = Job.new i[:name]
   j.priority = DEFAULT_PRIORITY
   # Slice 20 task for each batch, otherwise it takes too long
-  i[:task][0...20].each do |t|
+  i[:task][0...40].each do |t|
     sleep_time = t.values.reduce(:+)
     j.add_task(Task.new("sleep #{sleep_time}"))
   end
   j
 end
+
+jobs=jobs[0...1]
 
 if jobs.size != deadlines.size
   puts "Deadline provided doesn't match #jobs"

@@ -84,7 +84,6 @@ class Client
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
     @logger.info "#{job_id} popped a task to worker #{worker}"
-    @logger.info "#{job_id} jizz"
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
     res = worker_server.run_task(task, job_id)
     @logger.info "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
