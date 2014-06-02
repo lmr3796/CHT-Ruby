@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-
+# usage: ./worker [option for daemons] [-- [options for worker]]
 ruby daemon-wrapper.rb './worker_runner.rb' "$@"
 
 
