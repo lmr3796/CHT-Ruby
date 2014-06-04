@@ -54,7 +54,10 @@ class Worker < BaseServer
   end
 
   def run_task(task, job_uuid=nil)
-    raise 'Not a proper task to run' if !task.is_a? Task
+    if !task.is_a? Task
+      @logger.info "The input is not a task"
+      raise 'Not a proper task to run'
+    end
     res = nil
     @lock.synchronize{  # Worker is dedicated
       @status_checker.worker_running @name
