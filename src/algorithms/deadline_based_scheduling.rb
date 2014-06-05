@@ -25,6 +25,7 @@ module SchedulingAlgorithm
       job_id_by_priority.each{ |job_id|
         break if remaining_worker.empty?
         job = job_list[job_id]
+        @logger.debug "job_id, task_remaining = #{job_id}, #{job.task_remaining}"
         history = job_running_time[job_id]
         avg_time = history.reduce(:+)/history.size rescue nil
         job.avg_task_running_time = avg_time if avg_time != nil && avg_time > 0
@@ -47,16 +48,16 @@ module SchedulingAlgorithm
       # If the deadline is already passed, assign as many as workers for the job.
       if current_timestamp > job.deadline
         @logger.warn "#{job_id} missed deadline; give as much as possble"
-        return 0, [worker_by_throughput.size, job.task.size].min
+        return 0, [worker_by_throughput.size, job.task_remaining].min
       end
 
       # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
-      required_throughput = job.task.size / Float(job.deadline-current_timestamp)
+      required_throughput = job.task_remaining / Float(job.deadline-current_timestamp)
       worker_by_throughput.each_with_index do |worker_id|
         break if total_throughput > required_throughput
-        break if needed_worker == job.task.size
+        break if needed_worker == job.task_remaining
         needed_worker += 1
 
         # Try to estimate run time then get workers to occupy

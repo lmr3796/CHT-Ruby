@@ -135,6 +135,9 @@ class Dispatcher < BaseServer
     @logger.info "#{job_id} gets worker #{worker}"
     return worker
   end
+  def one_task_done(job_id)
+    @job_list[job_id].one_task_done
+  end
   def job_done(job_id)
     @logger.info "#{job_id} is done"
     @job_list.delete(job_id)

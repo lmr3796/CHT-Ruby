@@ -15,7 +15,7 @@ module SchedulingAlgorithm
       schedule_result = {}
       # Compute workload for each job
       workload_list = Hash.new{ |hash, key|
-        hash[key] = 1.0 * job.task.size * job.task_running_time_on_worker.values.reduce(:+) / job.task_running_time_on_worker.size
+        hash[key] = 1.0 * job.task_remaining * job.task_running_time_on_worker.values.reduce(:+) / job.task_running_time_on_worker.size
       }
       job_id_by_workload = job_list.keys.sort_by{ |job_id| -workload_list[job_id] }
       total_workload = job_list.keys.inject{ |sum, job_id| sum = sum + workload_list[job_id] }
@@ -33,14 +33,14 @@ module SchedulingAlgorithm
       }
       job_id_by_workload.each{ |job_id|
         break if remaining_worker_count == 0
-        additional_worker_count = [expected_worker_count[job_id].floor, job_list[job_id].task.size - job_worker_count[job_id], remaining_worker_count].min
+        additional_worker_count = [expected_worker_count[job_id].floor, job_list[job_id].task_remaining - job_worker_count[job_id], remaining_worker_count].min
         remaining_worker_count -= additional_worker_count
         job_worker_count[job_id] += additional_worker_count
       }
       # If there are workers left, assign them to work with higher workload
       job_id_by_workload.each{ |job_id|
         break if remaining_worker_count == 0
-        additional_worker_count = [job_list[job_id].task.size - job_worker_count[job_id], remaining_worker_count].min
+        additional_worker_count = [job_list[job_id].task_remaining - job_worker_count[job_id], remaining_worker_count].min
         remaining_worker_count -= additional_worker_count
         job_worker_count[job_id] += additional_worker_count
       }
