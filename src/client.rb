@@ -45,18 +45,20 @@ class Client
     task_queue = @submitted_jobs[job_id]
     thread_id_list = []
     until task_queue.empty? do
-      task = task_queue.pop
-      @logger.info "#{job_id} waiting for worker"
-      worker = @dispatcher.require_worker(job_id)
-      @logger.info "#{job_id} assigned with worker #{worker}"
-      thread_id_list << @thread_pool.schedule {
-        #TODO: Task execution failure???
-        run_task_on_worker(task, job_id, worker)
+      until task_queue.empty? do
+        task = task_queue.pop
+        @logger.info "#{job_id} waiting for worker"
+        worker = @dispatcher.require_worker(job_id)
+        @logger.info "#{job_id} assigned with worker #{worker}"
+        thread_id_list << @thread_pool.schedule {
+          #TODO: Task execution failure???
+          run_task_on_worker(task, job_id, worker)
+        }
+      end
+      thread_id_list.each{ |thread_id|
+        @thread_pool.join(thread_id)
       }
     end
-    thread_id_list.each{ |thread_id|
-      @thread_pool.join(thread_id)
-    }
     @logger.info "Job #{job_id} is done"
     @dispatcher.job_done(job_id)
   end
