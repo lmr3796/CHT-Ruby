@@ -11,7 +11,8 @@ OptionParser.new do |opts|
   # This displays the help screen, all programs are
   # assumed to have this option.
   opts.on( '-h', '--help', 'Display this screen' ){|h| puts opts }
-  opts.on( '-r', '--rate r', Float, 'Set job sampling rate' ){|r| $options[:job_sample_rate] = r }
+  opts.on( '-r', '--sample-rate r', Float, 'Set job sampling rate' ){|r| $options[:job_sample_rate] = r }
+  opts.on( '-s', '--scale-rate r', Float, 'Set job sampling rate' ){|r| $options[:job_scale_rate] = r }
   opts.on( '-f', '--file file_name', 'Set workload file name' ) do |f|
     begin
       file = open f
