@@ -24,7 +24,7 @@ module StandardWorkloadFormatParser
     return f.map{|l| from_line l.strip}
   end
   def from_line(l)
-    return Hash[FIELDS.zip(l.split.map{|s|s.to_i})]
+    return Hash[FIELDS.zip(l.split.map{|s|s.to_i})].select{|k,v| v!=-1}
   end
   module_function :from_line, :from_file
 end
