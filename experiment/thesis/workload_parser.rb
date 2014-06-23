@@ -164,6 +164,9 @@ class WorkloadSynthesizer
     merged_batch.each do |b|
       c = Client.new CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch]
       client_list << c
+      $stderr.puts "sleep for #{b[:wait_time]}"
+      sleep b[:wait_time]
+      $stderr.puts "Submit #{b[:batch].size} jobs!"
       sleep b[:wait_time]
       c.start
     end
