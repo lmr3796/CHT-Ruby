@@ -8,7 +8,7 @@ require_relative 'base_server'
 require_relative 'job.rb'
 
 class Worker < BaseServer
-  attr_reader :name, :status, :id, :avg_running_time
+  attr_reader :name, :status, :id, :avg_running_time, :nice
   attr_writer :status_checker
 
   LEARNING_RATE = 0.2
@@ -28,6 +28,15 @@ class Worker < BaseServer
     @lock = Mutex.new
     @status = STATUS::AVAILABLE
     @avg_running_time = nil
+    @nice = 0   # Something like nice value
+  end
+
+  def reset_nice
+    @nice = 0
+  end
+
+  def set_nice
+    @nice += 1
   end
 
   def register()
@@ -37,6 +46,7 @@ class Worker < BaseServer
 
   def status=(s)
     raise ArgumentError if !STATUS::constants.include? s
+    reset_nice
     @logger.info "Worker status set to #{s}"
     @status = s
   end
@@ -48,6 +58,10 @@ class Worker < BaseServer
     @status_checker.log_running_time job_id, time
   end
 
+  def force_release
+    @logger.warn "Forced released, might be some error"
+    release
+  end
   def release()
     # TODO: what if maliciously called?
     @status_checker.release_worker @name

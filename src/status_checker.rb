@@ -84,13 +84,15 @@ class StatusChecker < BaseServer
   end
   def collect_status(workers=@worker_table.keys)
     @logger.info "Collecting status"
+    occupied = []
     @lock.with_write_lock do
       workers.each do |w|
         status = nil
         avg_time = nil
         begin
-          status = @worker_table[w].status
           avg_time = @worker_table[w].avg_running_time
+          status = @worker_table[w].status
+          occupied << w if status == Worker::STATUS::OCCUPIED
         rescue => e
           @logger.warn "Exception #{e} when checking status of worker #{w}"
           @logger.debug e.to_s
@@ -102,6 +104,16 @@ class StatusChecker < BaseServer
         end
       end
     end
+
+    occupied.each do |w|
+      @worker_table[w].set_nice
+      if @worker_table[w].nice > 2
+        @logger.error "#{w} stucked at occupied, force release"
+        @worker_table[w].force_release
+      end
+    end
+
+    # In case worker is available but not dispatched
     workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
       begin
         @dispatcher.on_worker_available w
