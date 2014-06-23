@@ -28,3 +28,61 @@ module StandardWorkloadFormatParser
   end
   module_function :from_line, :from_file
 end
+
+class WorkloadSynthesizer
+  attr_accessor :sample_rate,:scale_rate,:time_limit
+  def initialize(job_set, opt={})
+    self.reset
+    self.job_set = job_set
+    self.sample_rate = opt[:job_sample_rate] if opt.has_key? :job_sample_rate
+    self.scale_rate  = opt[:job_scale_rate] if opt.has_key? :job_scale_rate
+    self.time_limit  = opt[:job_time_limit] if opt.has_key? :job_time_limit
+  end
+  def job_set=(j)
+    @job_set = j.clone
+  end
+  def sample_rate=(r)
+    raise ArgumentError if not r.is_a? Numeric
+    @sample_rate = r
+  end
+  def scale_rate=(r)
+    raise ArgumentError if not r.is_a? Numeric
+    @scale_rate = r
+  end
+  def time_limit=(t)
+    raise ArgumentError if not t.is_a? Integer
+    @time_limit = t
+  end
+  def reset()
+    @sample_rate = 1.0
+    @scale_rate  = 1.0
+    @time_limit  = nil
+  end
+
+  def estimated_cpu_time()
+    return job_set_to_run.map{|j|j[:run_time] * j[:allocated_processors]}.reduce(:+) 
+  end
+  def filter_time_limit(job_set, limit=@time_limit)
+    raise 'Jobs not set' if job_set == nil
+    return job_set if limit == nil
+    return job_set.select {|j|j[:run_time] < limit}
+  end
+  def sample(job_set, r=@sample_rate)
+    sample_size = (job_set.size*r).to_i
+    return job_set.sample(sample_size)
+  end
+  def scale(job_set, r=@scale_rate)
+    return job_set.map{|j| j2 = j.clone; j2[:run_time] *= r; j2}
+  end
+  def run()
+    return job_set_to_run
+  end
+  def job_set_to_run 
+    j = @job_set
+    j = filter_time_limit(j)
+    j = scale(j)
+    j = sample(j)
+    return j
+  end
+  private :job_set_to_run, :sample, :scale, :filter_time_limit
+end
