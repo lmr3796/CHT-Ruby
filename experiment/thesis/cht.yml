@@ -23,7 +23,7 @@ windows:
   - test:
       layout: main-vertical
       panes:
-        - 
+        - cd experiment/thesis
         - ruby status_checker_runner.rb
         - ruby decision_maker_runner.rb
         - ruby dispatcher_runner.rb
