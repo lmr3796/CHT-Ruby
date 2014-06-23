@@ -126,10 +126,12 @@ class WorkloadSynthesizer
     group = Hash.new(0)
     job_set.each{|j|group[j[:user_id]] += 1}
 
+    now = Time.now
     job_set = job_set.map do |j|
       job = Job.new
       # Model priority by user
       job.priority = group[j[:user_id]]
+      job.deadline = now + j[:deadline]
       (0...j[:allocated_processors]).each do
         job.add_task Task.new("sleep #{j[:run_time]}")
       end
