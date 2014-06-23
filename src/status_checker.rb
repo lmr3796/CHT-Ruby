@@ -9,13 +9,13 @@ require_relative 'common/read_write_lock_hash'
 class StatusChecker < BaseServer
 
   def job_running_time()
-    @lock.with_read_lock{return Hash[@job_running_time.clone]}
+    @lock.with_read_lock{return Hash[@job_running_time]}
   end
   def worker_avg_running_time()
-    @lock.with_read_lock{return @worker_avg_running_time.clone}
+    @lock.with_read_lock{return Hash[@worker_avg_running_time]}
   end
   def worker_status
-    @lock.with_read_lock{return @worker_status_table.clone}
+    @lock.with_read_lock{return Hash[@worker_status_table]}
   end
   def worker_uri(worker)
     return @worker_table[worker].instance_variable_get("@uri")
@@ -25,7 +25,7 @@ class StatusChecker < BaseServer
     # TODO: make up a worker table
     @lock = ReadWriteLock.new
     @job_running_time = ReadWriteLockHash.new
-    @worker_table = worker_table.clone
+    @worker_table = Hash[worker_table]
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]

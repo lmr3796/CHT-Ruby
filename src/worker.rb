@@ -69,7 +69,7 @@ class Worker < BaseServer
 
   def run_task(task, job_uuid=nil)
     if !task.is_a? Task
-      @logger.info "The input is not a task"
+      @logger.error "The input is not a task"
       raise 'Not a proper task to run'
     end
     res = nil
