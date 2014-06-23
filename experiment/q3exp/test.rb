@@ -23,7 +23,7 @@ end
 
 workload = WorkloadParser::workload_from_file file 
 jobs = workload.map do |i|
-  j = Job.new i[:name]
+  j = Job.new
   j.priority = DEFAULT_PRIORITY
   # Slice 20 task for each batch, otherwise it takes too long
   i[:task][0...20].each do |t|
