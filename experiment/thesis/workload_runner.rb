@@ -52,5 +52,5 @@ jobs = StandardWorkloadFormatParser.from_file $options[:input]
 runner = WorkloadSynthesizer.new jobs, $options
 #puts jobs.size
 #puts jobs.sample(10)
-puts runner.estimated_cpu_time
+#puts runner.estimated_cpu_time
 runner.run

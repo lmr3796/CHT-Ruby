@@ -126,12 +126,12 @@ class WorkloadSynthesizer
     group = Hash.new(0)
     job_set.each{|j|group[j[:user_id]] += 1}
 
-    now = Time.now
     job_set = job_set.map do |j|
       job = Job.new
+      # Use exec time deadline first, convert it on execution
+      job.deadline = Time.at(j[:deadline])
       # Model priority by user
       job.priority = group[j[:user_id]]
-      job.deadline = now + j[:deadline]
       (0...j[:allocated_processors]).each do
         job.add_task Task.new("sleep #{j[:run_time]}")
       end
@@ -149,7 +149,7 @@ class WorkloadSynthesizer
     # Merge batch
     merged_batch = [{:wait_time => 0, :batch =>[]}]
     job_set.each do |j|
-      if merged_batch[-1][:wait_time] > 1
+      if j[:wait_time] > 1 or merged_batch[-1][:wait_time] > 1
         merged_batch << {:wait_time => j[:wait_time], :batch =>[j[:job]]}
       else
         merged_batch[-1][:wait_time] += j[:wait_time]
@@ -163,18 +163,27 @@ class WorkloadSynthesizer
 
     # Execute
     client_list = []
+    total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
     merged_batch.each do |b|
-      c = Client.new CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch]
-      client_list << c
-      $stderr.puts "sleep for #{b[:wait_time]}"
+      $stderr.puts "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
-      $stderr.puts "Submit #{b[:batch].size} jobs!"
-      sleep b[:wait_time]
-      c.start
+
+      # Convert deadline to real world time
+      now = Time.now
+      b[:batch].each do |j| 
+        # Time instance must convert back to float for add operator
+        j.deadline = now + j.deadline.to_f
+      end  
+
+      # Run!!
+      client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch])
+      jobs_left -= b[:batch].size
+      $stderr.puts "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
+      client_list[-1].start
     end
     client_list.each{|c| c.wait_all}
   end
-  
+
   def job_set_to_run 
     j = Marshal.load(Marshal.dump(@job_set))
     j = sample(j)
