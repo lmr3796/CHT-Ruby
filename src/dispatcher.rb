@@ -17,20 +17,17 @@ class Dispatcher < BaseServer
       @logger = logger
     end
 
-    module JobListChangeSubscriber
-      # Observer pattern
-      def subscribe_job_list_change(subscriber)
-        @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
-      end
-      def publish_job_submitted(job_id_list)
-        @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
-      end
-      def publish_job_deleted(job_id)
-        @logger.info "Publishing deletion of #{job_id}"
-        @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
-      end
+    # Observer pattern
+    def subscribe_job_list_change(subscriber)
+      @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
     end
-    include JobListChangeSubscriber
+    def publish_job_submitted(job_id_list)
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
+    end
+    def publish_job_deleted(job_id)
+      @logger.info "Publishing deletion of #{job_id}"
+      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
+    end
 
     # TODO: Hook notifier on writing methods
     # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
@@ -92,17 +89,14 @@ class Dispatcher < BaseServer
       @logger.info 'Updated schedule successfully'
     end
 
-    module JobListChangeObserver
-      # Observer callbacks
-      def on_job_submitted(job_id_list)
-        schedule_job
-      end
-      def on_job_deleted(job_id)
-        @worker_job_table.delete_if{|w,j| j == job_id}
-        schedule_job
-      end
+    # Observer callbacks
+    def on_job_submitted(job_id_list)
+      schedule_job
     end
-    include JobListChangeObserver
+    def on_job_deleted(job_id)
+      @worker_job_table.delete_if{|w,j| j == job_id}
+      schedule_job
+    end
 
   end
 
@@ -165,64 +159,60 @@ class Dispatcher < BaseServer
 
 
   # General APIs
-  module GeneralInterface
-    def worker_status()
-      # TODO: implement this
-      raise NotImplementedError
-    end
-    def worker_uri(worker)
-      return @status_checker.worker_uri worker
-    end
+  def worker_status()
+    # TODO: implement this
+    raise NotImplementedError
   end
-  include GeneralInterface
+  def worker_uri(worker)
+    return @status_checker.worker_uri worker
+  end
 
   def log_job_worker_queue
     queue_status = @job_worker_queues.map{|k,v| [k, "#{v.size} wrks, #{v.num_waiting} waiting"]}
     @logger.warn "Current queue status: #{queue_status}"
   end
 
-  module JobListChangeObserver
-    # Observer callbacks
-    def on_job_submitted(job_id_list)
-      job_id_list.each do |job_id|
-        # NEVER directly cover it with new queue, threads are waiting on the old queus!!!!!!
-        if @job_worker_queues.has_key? job_id
-          @job_worker_queues[job_id].clear
-        else
-          @job_worker_queues[job_id] = Queue.new 
-          @status_checker.register_job job_id # Can't make this an observer in status checker for dependency
-        end
-      end
-      # TODO: might need to refactor to observers...
-      @logger.info "Collecting status from status checker"
-      @status_checker.collect_status
-      worker_status = @status_checker.worker_status
-      @logger.info "Current worker status: #{worker_status}"
-      worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
-        on_worker_available(w)
+  # Observer callbacks
+  def on_job_submitted(job_id_list)
+    job_id_list.each do |job_id|
+      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # !!!NEVER directly cover it with new queue, threads are waiting on the old queues!!!
+      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      if @job_worker_queues.has_key? job_id
+        @job_worker_queues[job_id].clear
+      else
+        @job_worker_queues[job_id] = Queue.new 
+        @status_checker.register_job job_id # Can't make this an observer in status checker for dependency
       end
     end
-
-    def on_job_deleted(job_id)
-      # Clear the entry in @job_worker_queues[job_id]
-      # Release nodes first
-      @logger.debug "Clearing #{job_id} worker queue"
-      until @job_worker_queues[job_id].empty? do
-        worker = @job_worker_queues[job_id].pop
-        @status_checker.release_worker worker
-      end
-      @logger.debug "Remove #{job_id} worker queue"
-      @job_worker_queues.delete job_id
-      # TODO: might need to refactor to observers...
-      @schedule_manager.schedule_job
-      @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
-      @status_checker.collect_status
-      @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
-        on_worker_available(w)
-      end
+    # TODO: might need to refactor to observers...
+    @logger.info "Collecting status from status checker"
+    @status_checker.collect_status
+    worker_status = @status_checker.worker_status
+    @logger.info "Current worker status: #{worker_status}"
+    worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
+      on_worker_available(w)
     end
   end
-  include JobListChangeObserver
 
+  def on_job_deleted(job_id)
+    # Clear the entry in @job_worker_queues[job_id]
+    # Release nodes first
+    @logger.debug "Clearing #{job_id} worker queue"
+    until @job_worker_queues[job_id].empty? do
+      worker = @job_worker_queues[job_id].pop
+      @status_checker.release_worker worker
+    end
+    # FIXME: very possible bug here
+    @logger.warn "Remove #{job_id} worker queue"
+    @job_worker_queues.delete job_id
+    # TODO: might need to refactor to observers...
+    @schedule_manager.schedule_job
+    @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
+    @status_checker.collect_status
+    @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
+      on_worker_available(w)
+    end
+  end
 
 end
