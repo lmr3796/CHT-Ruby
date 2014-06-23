@@ -1,0 +1,3 @@
+Parameter tuning
+
+-d 2 -c 0.01 -r 0.001 -t 2000,30000 -f wagap-2013.swf

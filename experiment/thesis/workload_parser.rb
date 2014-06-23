@@ -37,9 +37,14 @@ class WorkloadSynthesizer
     self.sample_rate = opt[:job_sample_rate] if opt.has_key? :job_sample_rate
     self.scale_rate  = opt[:job_scale_rate] if opt.has_key? :job_scale_rate
     self.time_limit  = opt[:job_time_limit] if opt.has_key? :job_time_limit
+    self.deadline_rate = opt[:deadline_rate] if opt.has_key? :deadline_rate
   end
   def job_set=(j)
     @job_set = j.clone
+  end
+  def deadline_rate=(r)
+    raise ArgumentError if not r.is_a? Numeric
+    @deadline_rate = r
   end
   def sample_rate=(r)
     raise ArgumentError if not r.is_a? Numeric
@@ -50,13 +55,14 @@ class WorkloadSynthesizer
     @scale_rate = r
   end
   def time_limit=(t)
-    raise ArgumentError if not t.is_a? Integer
+    raise ArgumentError if not t.is_a? Range
     @time_limit = t
   end
   def reset()
-    @sample_rate = 1.0
-    @scale_rate  = 1.0
-    @time_limit  = nil
+    @sample_rate   = 1.0
+    @scale_rate    = 1.0
+    @time_limit    = nil
+    @deadline_rate = nil
   end
 
   def estimated_cpu_time()
@@ -64,14 +70,15 @@ class WorkloadSynthesizer
   end
   def filter_time_limit(job_set, limit=@time_limit)
     raise 'Jobs not set' if job_set == nil
-    return job_set if limit == nil
-    return job_set.select {|j|j[:run_time] < limit}
+    return job_set.clone if limit == nil
+    return job_set.select {|j| limit.cover? j[:run_time]}
   end
   def sample(job_set, r=@sample_rate)
-    sample_size = (job_set.size*r).to_i
-    return job_set.sample(sample_size)
+    return job_set.clone if r == nil
+    return job_set.select{rand <= r}
   end
   def scale(job_set, r=@scale_rate)
+    return job_set.clone if r == nil
     return job_set.map{|j| j2 = j.clone; j2[:run_time] *= r; j2}
   end
   def run()
@@ -79,10 +86,11 @@ class WorkloadSynthesizer
   end
   def job_set_to_run 
     j = @job_set
+    j = sample(j)
     j = filter_time_limit(j)
     j = scale(j)
-    j = sample(j)
+    j = j.each{|i|i[:deadline] = i[:run_time] * @deadline_rate}
     return j
   end
-  private :job_set_to_run, :sample, :scale, :filter_time_limit
+  private :sample, :scale, :filter_time_limit
 end
