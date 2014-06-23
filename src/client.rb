@@ -47,9 +47,9 @@ class Client
     until task_queue.empty? do
       until task_queue.empty? do
         task = task_queue.pop
-        @logger.info "#{job_id} waiting for worker"
+        @logger.debug "#{job_id} waiting for worker"
         worker = @dispatcher.require_worker(job_id)
-        @logger.info "#{job_id} assigned with worker #{worker}"
+        @logger.debug "#{job_id} assigned with worker #{worker}"
         thread_id_list << @thread_pool.schedule {
           #TODO: Task execution failure???
           run_task_on_worker(task, job_id, worker)
@@ -70,7 +70,7 @@ class Client
     jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a? Job}
     @logger.info "Submitting #{jobs.size} job(s)"
     job_id_list = @dispatcher.submit_jobs(jobs)
-    (@logger.info "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
+    (@logger.error "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index{|job_id, index|
@@ -85,17 +85,17 @@ class Client
 
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
-    @logger.info "#{job_id} popped a task to worker #{worker}"
+    @logger.debug "#{job_id} popped a task to worker #{worker}"
     begin
       worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
       res = worker_server.run_task(task, job_id)
-      @logger.info "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
+      @logger.debug "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
       worker_server.log_running_time job_id, res[:elapsed]
       worker_server.release
-      @logger.info "#{job_id} released worker #{worker}"
+      @logger.debug "#{job_id} released worker #{worker}"
       @dispatcher.one_task_done(job_id)
     rescue Exception => e
-      @logger.info "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
+      @logger.error "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
       @submitted_jobs[job_id].push(task)
     end
   end
