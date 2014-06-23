@@ -120,7 +120,7 @@ class WorkloadSynthesizer
     return job_set
   end
 
-  def run()
+  def run(dryrun=false)
     job_set = job_set_to_run
     # Parse priority by user
     group = Hash.new(0)
@@ -157,7 +157,7 @@ class WorkloadSynthesizer
     #p merged_batch.map{|i|i[:wait_time]}
     #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
     #p job_set.map{|i|i[:wait_time]}.reduce(:+)
-    #return
+    return merged_batch if dryrun
 
     # Execute
     client_list = []
