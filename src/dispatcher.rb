@@ -75,7 +75,7 @@ class Dispatcher < BaseServer
         worker_avg_running_time = @status_checker.worker_avg_running_time
 
         # {job_id => [worker1, worker2...]}
-        @job_worker_table = @decision_maker.schedule_job @job_list, worker_can_be_scheduled,
+        @job_worker_table = @decision_maker.schedule_job Marshal.load(Marshal.dump(@job_list)), worker_can_be_scheduled,
           :job_running_time=>job_running_time, :worker_avg_running_time => worker_avg_running_time
 
 
