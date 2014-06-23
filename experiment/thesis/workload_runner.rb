@@ -10,7 +10,7 @@ OptionParser.new do |opts|
   $options={}
   # This displays the help screen, all programs are
   # assumed to have this option.
-  opts.on( '-h', '--help', 'Display this screen' ){|h| puts opts }
+  opts.on( '-h', '--help', 'Display this screen' ){|h| puts opts; exit }
   opts.on( '-r', '--sample-rate rate', Float, 'Set job sampling rate' ){|r| $options[:job_sample_rate] = r }
   opts.on( '-s', '--scale-rate rate', Float, 'Set job scale rate' ){|r| $options[:job_scale_rate] = r }
   opts.on( '-t', '--run-time-limit limit', Integer, 'Set job runtime limit' ){|r| $options[:job_time_limit] = r }
@@ -34,3 +34,5 @@ rescue
 end
 
 jobs = StandardWorkloadFormatParser.from_file $options[:input]
+runner = WorkloadSynthesizer.new jobs, $options
+puts runner.run.size
