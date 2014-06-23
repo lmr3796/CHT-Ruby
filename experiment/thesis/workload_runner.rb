@@ -30,6 +30,7 @@ OptionParser.new do |opts|
   opts.on( '-T limit', '--wait-time-limit limit', Float, 'Set job wait time limit' ) do |r|
     $options[:job_wait_time_limit] = r
   end
+  opts.on('--dry-run', "Don't submit jobs, give job info"){$options[:dry_run]=true}
   opts.on( '-f', '--file file_name', 'Set workload file name' ) do |f|
     begin
       file = open f
@@ -55,4 +56,4 @@ runner = WorkloadSynthesizer.new jobs, $options
 #puts jobs.size
 #puts jobs.sample(10)
 #puts runner.estimated_cpu_time
-runner.run
+runner.run(!!$options[:dry_run])
