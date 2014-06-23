@@ -21,7 +21,7 @@ OptionParser.new do |opts|
     $options[:job_scale_rate] = r 
   end
   opts.on( '-w rate', '--wait-time-scale-rate rate', Float, 'Set job scale rate' ) do |r|
-    $options[:wait_scale_rate] = r 
+    $options[:wait_time_scale_rate] = r
   end
   opts.on( '-t lower,upper', '--run-time-limit lower,upper', Array, 'Set job run time limit' ) do |r|
     $options[:job_exec_time_limit] = Range.new r[0].to_f, r[1].to_f

@@ -42,7 +42,7 @@ class WorkloadSynthesizer
     self.job_set = job_set
     self.sample_rate = opt[:job_sample_rate] if opt.has_key? :job_sample_rate
     self.job_scale_rate  = opt[:job_scale_rate] if opt.has_key? :job_scale_rate
-    self.wait_time_scale_rate  = opt[:job_scale_rate] if opt.has_key? :wait_time_scale_rate
+    self.wait_time_scale_rate  = opt[:wait_time_scale_rate] if opt.has_key? :wait_time_scale_rate
     self.exec_time_limit  = opt[:job_exec_time_limit] if opt.has_key? :job_exec_time_limit
     self.wait_time_limit  = opt[:job_wait_time_limit] if opt.has_key? :job_wait_time_limit
     self.deadline_rate = opt[:deadline_rate] if opt.has_key? :deadline_rate
@@ -86,6 +86,15 @@ class WorkloadSynthesizer
   def estimated_cpu_time()
     return job_set_to_run.map{|j|j[:run_time] * j[:allocated_processors]}.reduce(:+) 
   end
+  def shift_submit_time(job_set)
+    raise 'Jobs not set' if job_set == nil
+    job_set = Marshal.load(Marshal.dump(job_set))
+    base_time = job_set[0][:submit_time]
+    job_set.each do |j|
+      j[:submit_time] -= base_time
+    end
+    return job_set
+  end
   def filter_exec_time_limit(job_set)
     raise 'Jobs not set' if job_set == nil
     return Marshal.load(Marshal.dump(job_set)) if @exec_time_limit == nil
@@ -125,16 +134,44 @@ class WorkloadSynthesizer
         job.add_task Task.new("sleep #{j[:run_time]}")
       end
       # Parse submission time
-      [job, j[:submit_time]-job_set[0][:submit_time]]
+      {:job => job, :submit_time => j[:submit_time]}
     end
-    #p job_set
+
+    # Parse submission time to wait (sleep) time
+    (0...job_set.size-1).each do |i|
+      job_set[i][:wait_time] = job_set[i+1][:submit_time] - job_set[i][:submit_time]
+    end
+    job_set[-1][:wait_time] = 0
+    job_set.each{|j| j.delete :submit_time}
+
+    # Merge batch
+    merged_batch = [{:wait_time => 0, :batch =>[]}]
+    job_set.each do |j|
+      if j[:wait_time] + merged_batch[-1][:wait_time] > 1
+        merged_batch << {:wait_time => j[:wait_time], :batch =>[j[:job]]}
+      else
+        merged_batch[-1][:wait_time] += j[:wait_time]
+        merged_batch[-1][:batch] << j[:job]
+      end
+    end
+
+    # Execute
+    client_list = []
+    merged_batch.each do |b|
+      c = Client.new CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), jobs
+      client_list << c
+      sleep b[:wait_time]
+      c.start
+    end
+    client_list.each{|c| c.wait_all}
   end
   
   def job_set_to_run 
     j = Marshal.load(Marshal.dump(@job_set))
-    j = filter_wait_time_limit(j)
-    j = filter_exec_time_limit(j)
     j = sample(j)
+    j = filter_exec_time_limit(j)
+    j = shift_submit_time(j)
+    j = filter_wait_time_limit(j)
     #p "jizz: #{j.size}"
     j = scale(j)
     j = j.each{|i|i[:deadline] = i[:run_time] * @deadline_rate}
