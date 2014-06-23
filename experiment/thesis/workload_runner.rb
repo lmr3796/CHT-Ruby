@@ -1,5 +1,6 @@
 #! /usr/bin/env ruby
 
+require 'logger/colors'
 require 'optparse'
 require 'time'
 
@@ -48,6 +49,7 @@ rescue
   exit(-1)
 end
 
+$options[:logger] = Logger.new(STDERR)
 jobs = StandardWorkloadFormatParser.from_file $options[:input]
 runner = WorkloadSynthesizer.new jobs, $options
 #puts jobs.size

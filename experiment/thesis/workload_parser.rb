@@ -1,4 +1,5 @@
 require 'csv'
+require 'logger/colors'
 
 require_relative '../../config/config'
 require_relative '../../src/client'
@@ -38,6 +39,7 @@ class WorkloadSynthesizer
   attr_accessor :sample_rate,:wait_time_scale_rate,
     :job_scale_rate,:exec_time_limit, :wait_time_limit
   def initialize(job_set, opt={})
+    @logger = opt[:logger]
     self.reset
     self.job_set = job_set
     self.sample_rate = opt[:job_sample_rate] if opt.has_key? :job_sample_rate
@@ -165,7 +167,7 @@ class WorkloadSynthesizer
     client_list = []
     total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
     merged_batch.each do |b|
-      $stderr.puts "Sleep for #{b[:wait_time]}"
+      @logger.debug "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
 
       # Convert deadline to real world time
@@ -178,7 +180,7 @@ class WorkloadSynthesizer
       # Run!!
       client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch])
       jobs_left -= b[:batch].size
-      $stderr.puts "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
+      @logger.debug "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
       client_list[-1].start
     end
     client_list.each{|c| c.wait_all}
