@@ -162,8 +162,17 @@ class WorkloadSynthesizer
     #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
     #p job_set.map{|i|i[:wait_time]}.reduce(:+)
     return merged_batch if dryrun
+    
+    # DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # Send all at a time
+    merged_batch = [merged_batch.reduce do |memo, obj|
+      {:wait_time => memo[:wait_time], :batch => memo[:batch] + obj[:batch]}
+    end]
+    # END DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # Execute
+    client_logger = Logger.new(STDERR)
+    client_logger.level = Logger::INFO
     client_list = []
     total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
     merged_batch.each do |b|
@@ -178,7 +187,8 @@ class WorkloadSynthesizer
       end  
 
       # Run!!
-      client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch])
+      client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER),
+                                b[:batch], 1000, client_logger)
       jobs_left -= b[:batch].size
       @logger.debug "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
       client_list[-1].start
