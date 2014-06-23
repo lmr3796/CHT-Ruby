@@ -147,18 +147,22 @@ class WorkloadSynthesizer
     # Merge batch
     merged_batch = [{:wait_time => 0, :batch =>[]}]
     job_set.each do |j|
-      if j[:wait_time] + merged_batch[-1][:wait_time] > 1
+      if merged_batch[-1][:wait_time] > 1
         merged_batch << {:wait_time => j[:wait_time], :batch =>[j[:job]]}
       else
         merged_batch[-1][:wait_time] += j[:wait_time]
         merged_batch[-1][:batch] << j[:job]
       end
     end
+    #p merged_batch.map{|i|i[:wait_time]}
+    #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
+    #p job_set.map{|i|i[:wait_time]}.reduce(:+)
+    #return
 
     # Execute
     client_list = []
     merged_batch.each do |b|
-      c = Client.new CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), jobs
+      c = Client.new CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER), b[:batch]
       client_list << c
       sleep b[:wait_time]
       c.start
