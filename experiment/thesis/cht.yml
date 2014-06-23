@@ -18,7 +18,7 @@ root: ~/CHT-Ruby
 # Change the command to call tmux.  This can be used by derivatives/wrappers like byobu.
 # tmux_command: byobu
 
-pre: for (( i=2 ; i <= 12 ; i=i+1 )); do ssh cloud`printf %02d $i` killall ruby; done # Kills all workers :"")
+pre: for (( i=1 ; i <= 12 ; i=i+1 )); do ssh cloud`printf %02d $i` killall ruby; done # Kills all workers :"")
 windows:
   - test:
       layout: main-vertical
