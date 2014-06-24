@@ -57,5 +57,8 @@ runner = WorkloadSynthesizer.new jobs, $options
 #puts jobs.sample(10)
 #puts runner.estimated_cpu_time
 batch = runner.gen_workload
-runner.run(batch) unless !!$options[:dry_run]
+result = runner.run(batch) unless !!$options[:dry_run]
+p results
+meet_cnt = result.select{|r| r[:finish_time] < r[:deadline]}.size
+p "#{meet_cnt} out of #{results.size} jobs met deadline."
 #puts runner.run(!!$options[:dry_run]).map{|i|i[:batch].size}.reduce(:+)

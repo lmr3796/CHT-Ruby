@@ -196,7 +196,7 @@ class WorkloadSynthesizer
       client_list[-1].start
     end
     client_list.each{|c| c.wait_all}
-    return client_list
+    return client_list.map{|c| c.result}
   end
 
   def job_set_to_run 

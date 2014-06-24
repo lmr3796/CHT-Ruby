@@ -27,6 +27,7 @@ class Client
     # TODO a better way to send out result
     @result = Array.new(job_id_list.size){Hash.new}
     @thread_id_list = job_id_list.each_with_index.map{ |job_id,i|
+      @result[i][:deadline] = @jobs[i].deadline
       @thread_pool.schedule{
         run_job(job_id, i)
       }
@@ -44,6 +45,7 @@ class Client
   end
 
   def run_job(job_id, result_pos)
+    @result[result_pos][:deadline] = Time.now
     task_queue = @submitted_jobs[job_id]
     thread_id_list = []
     until task_queue.empty? do
