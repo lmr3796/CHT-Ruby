@@ -122,7 +122,7 @@ class WorkloadSynthesizer
     return job_set
   end
 
-  def run(dryrun=false)
+  def gen_workload()
     job_set = job_set_to_run
     # Parse priority by user
     group = Hash.new(0)
@@ -161,7 +161,6 @@ class WorkloadSynthesizer
     #p merged_batch.map{|i|i[:wait_time]}
     #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
     #p job_set.map{|i|i[:wait_time]}.reduce(:+)
-    return merged_batch if dryrun
     
     ## DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ## Send all at a time
@@ -169,7 +168,10 @@ class WorkloadSynthesizer
     #  {:wait_time => memo[:wait_time], :batch => memo[:batch] + obj[:batch]}
     #end]
     ## END DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!
+    return merged_batch
+  end
 
+  def run(merged_batch)
     # Execute
     client_logger = Logger.new(STDERR)
     client_logger.level = Logger::INFO
@@ -194,6 +196,7 @@ class WorkloadSynthesizer
       client_list[-1].start
     end
     client_list.each{|c| c.wait_all}
+    return client_list
   end
 
   def job_set_to_run 
