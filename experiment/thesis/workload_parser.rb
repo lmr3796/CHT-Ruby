@@ -183,7 +183,7 @@ class WorkloadSynthesizer
 
     # Generate batch deadline
     merged_batch.each do |b|
-      batch_deadline = b[:batch].map{|j| j.deadline.to_f}.max * 5
+      batch_deadline = b[:batch].map{|j| j.deadline.to_f}.max * @deadline_rate
       b[:batch].each{|j| j.deadline = Time.at(batch_deadline)}
     end
 
