@@ -57,4 +57,4 @@ runner = WorkloadSynthesizer.new jobs, $options
 #puts jobs.sample(10)
 #puts runner.estimated_cpu_time
 runner.run(!!$options[:dry_run])
-puts runner.run(!!$options[:dry_run]).map{|i|i[:batch].size}.reduce(:+)
+#puts runner.run(!!$options[:dry_run]).map{|i|i[:batch].size}.reduce(:+)

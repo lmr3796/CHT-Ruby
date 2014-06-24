@@ -63,12 +63,12 @@ class StatusChecker < BaseServer
     end
     @dispatcher.on_worker_available(worker)
   end
-  def release_worker(worker)
+  def release_worker(worker, notify=true)
     @lock.with_write_lock {
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
       @logger.info "Released worker: #{worker}"
     }
-    @dispatcher.on_worker_available(worker)
+    @dispatcher.on_worker_available(worker) if notify
   end
   def occupy_worker(worker)
     @lock.with_write_lock {
