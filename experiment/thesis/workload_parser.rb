@@ -207,7 +207,10 @@ class WorkloadSynthesizer
     j = filter_wait_time_limit(j)
     #p "jizz: #{j.size}"
     j = scale(j)
-    j = j.each{|i|i[:deadline] = i[:run_time] * @deadline_rate}
+    j = j.each do |i|
+      i[:deadline] = i[:run_time] * @deadline_rate
+      i[:deadline] *= (i[:allocated_processors]/4.0).ceil if i[:allocated_processors] > 4
+    end
     return j
   end
   private :sample, :scale, :filter_exec_time_limit
