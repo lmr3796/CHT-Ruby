@@ -91,6 +91,7 @@ class WorkloadSynthesizer
   def shift_submit_time(job_set)
     raise 'Jobs not set' if job_set == nil
     job_set = Marshal.load(Marshal.dump(job_set))
+    return [] if job_set.empty?
     base_time = job_set[0][:submit_time]
     job_set.each do |j|
       j[:submit_time] -= base_time
@@ -125,6 +126,7 @@ class WorkloadSynthesizer
   # Synthesize from workload
   def job_set_to_run 
     j = Marshal.load(Marshal.dump(@job_set))
+    return [] if j == nil
     j = sample(j)
     j = filter_exec_time_limit(j)
     j = shift_submit_time(j)
@@ -139,8 +141,10 @@ class WorkloadSynthesizer
   end
 
   # Convert to our format
+  # Batch is generated here
   def gen_workload()
     job_set = job_set_to_run
+    return [] if job_set.empty?
     # Parse priority by user
     group = Hash.new(0)
     job_set.each{|j|group[j[:user_id]] += 1}
@@ -175,6 +179,14 @@ class WorkloadSynthesizer
         merged_batch[-1][:batch] << j[:job]
       end
     end
+    merged_batch.shift if merged_batch[0][:batch].empty?
+
+    # Generate batch deadline
+    merged_batch.each do |b|
+      batch_deadline = b[:batch].map{|j| j.deadline.to_f}.max * 5
+      b[:batch].each{|j| j.deadline = Time.at(batch_deadline)}
+    end
+
     #p merged_batch.map{|i|i[:wait_time]}
     #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
     #p job_set.map{|i|i[:wait_time]}.reduce(:+)
