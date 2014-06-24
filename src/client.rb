@@ -10,7 +10,7 @@ require_relative 'common/thread_pool'
 
 
 class Client
-  attr_accessor :jobs
+  attr_accessor :jobs, :result
   DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
@@ -24,9 +24,11 @@ class Client
 
   def start(blocking=false)
     job_id_list = send_jobs(@jobs)
-    @thread_id_list = job_id_list.map{ |job_id|
+    # TODO a better way to send out result
+    @result = Array.new(job_id_list.size){Hash.new}
+    @thread_id_list = job_id_list.each_with_index.map{ |job_id,i|
       @thread_pool.schedule{
-        run_job(job_id)
+        run_job(job_id, i)
       }
     }
     return @thread_id_list unless blocking
@@ -41,7 +43,7 @@ class Client
     @thread_pool.join(thread_id)
   end
 
-  def run_job(job_id)
+  def run_job(job_id, result_pos)
     task_queue = @submitted_jobs[job_id]
     thread_id_list = []
     until task_queue.empty? do
@@ -60,6 +62,7 @@ class Client
       }
     end
     @logger.info "Job #{job_id} is done"
+    @result[result_pos][:finish_time] = Time.now
     @dispatcher.job_done(job_id)
   end
   private :run_job
