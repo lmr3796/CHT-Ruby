@@ -122,6 +122,23 @@ class WorkloadSynthesizer
     return job_set
   end
 
+  # Synthesize from workload
+  def job_set_to_run 
+    j = Marshal.load(Marshal.dump(@job_set))
+    j = sample(j)
+    j = filter_exec_time_limit(j)
+    j = shift_submit_time(j)
+    j = filter_wait_time_limit(j)
+    #p "jizz: #{j.size}"
+    j = scale(j)
+    j = j.each do |i|
+      i[:deadline] = i[:run_time] * @deadline_rate
+      i[:deadline] *= (i[:allocated_processors]/4.0).ceil if i[:allocated_processors] > 4
+    end
+    return j
+  end
+
+  # Convert to our format
   def gen_workload()
     job_set = job_set_to_run
     # Parse priority by user
@@ -161,7 +178,7 @@ class WorkloadSynthesizer
     #p merged_batch.map{|i|i[:wait_time]}
     #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
     #p job_set.map{|i|i[:wait_time]}.reduce(:+)
-    
+
     ## DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ## Send all at a time
     #merged_batch = [merged_batch.reduce do |memo, obj|
@@ -171,6 +188,7 @@ class WorkloadSynthesizer
     return merged_batch
   end
 
+  # Really executes it
   def run(merged_batch)
     # Execute
     client_logger = Logger.new(STDERR)
@@ -199,19 +217,5 @@ class WorkloadSynthesizer
     return client_list.map{|c| c.result}
   end
 
-  def job_set_to_run 
-    j = Marshal.load(Marshal.dump(@job_set))
-    j = sample(j)
-    j = filter_exec_time_limit(j)
-    j = shift_submit_time(j)
-    j = filter_wait_time_limit(j)
-    #p "jizz: #{j.size}"
-    j = scale(j)
-    j = j.each do |i|
-      i[:deadline] = i[:run_time] * @deadline_rate
-      i[:deadline] *= (i[:allocated_processors]/4.0).ceil if i[:allocated_processors] > 4
-    end
-    return j
-  end
   private :sample, :scale, :filter_exec_time_limit
 end
