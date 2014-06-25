@@ -20,3 +20,5 @@ doc/
 *.swp
 *.log
 *.pid
+
+config/config.rb
