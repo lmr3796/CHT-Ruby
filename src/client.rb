@@ -10,7 +10,7 @@ require_relative 'common/thread_pool'
 
 
 class Client
-  attr_accessor :jobs
+  attr_accessor :jobs, :result
   DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
@@ -24,9 +24,12 @@ class Client
 
   def start(blocking=false)
     job_id_list = send_jobs(@jobs)
-    @thread_id_list = job_id_list.map{ |job_id|
+    # TODO a better way to send out result
+    @result = Array.new(job_id_list.size){Hash.new}
+    @thread_id_list = job_id_list.each_with_index.map{ |job_id,i|
+      @result[i][:deadline] = @jobs[i].deadline
       @thread_pool.schedule{
-        run_job(job_id)
+        run_job(job_id, i)
       }
     }
     return @thread_id_list unless blocking
@@ -41,15 +44,16 @@ class Client
     @thread_pool.join(thread_id)
   end
 
-  def run_job(job_id)
+  def run_job(job_id, result_pos)
+    @result[result_pos][:deadline] = Time.now
     task_queue = @submitted_jobs[job_id]
     thread_id_list = []
     until task_queue.empty? do
       until task_queue.empty? do
         task = task_queue.pop
-        @logger.info "#{job_id} waiting for worker"
+        @logger.debug "#{job_id} waiting for worker"
         worker = @dispatcher.require_worker(job_id)
-        @logger.info "#{job_id} assigned with worker #{worker}"
+        @logger.debug "#{job_id} assigned with worker #{worker}"
         thread_id_list << @thread_pool.schedule {
           #TODO: Task execution failure???
           run_task_on_worker(task, job_id, worker)
@@ -60,6 +64,7 @@ class Client
       }
     end
     @logger.info "Job #{job_id} is done"
+    @result[result_pos][:finish_time] = Time.now
     @dispatcher.job_done(job_id)
   end
   private :run_job
@@ -70,7 +75,7 @@ class Client
     jobs.each {|x| raise 'Parameters should be a list of jobs or a single job' if !x.is_a? Job}
     @logger.info "Submitting #{jobs.size} job(s)"
     job_id_list = @dispatcher.submit_jobs(jobs)
-    (@logger.info "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
+    (@logger.error "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index{|job_id, index|
@@ -85,17 +90,17 @@ class Client
 
   def run_task_on_worker(task, job_id, worker)
     # TODO: Task execution failure???
-    @logger.info "#{job_id} popped a task to worker #{worker}"
+    @logger.debug "#{job_id} popped a task to worker #{worker}"
     begin
       worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
       res = worker_server.run_task(task, job_id)
-      @logger.info "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
+      @logger.debug "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
       worker_server.log_running_time job_id, res[:elapsed]
       worker_server.release
-      @logger.info "#{job_id} released worker #{worker}"
+      @logger.debug "#{job_id} released worker #{worker}"
       @dispatcher.one_task_done(job_id)
     rescue Exception => e
-      @logger.info "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
+      @logger.error "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
       @submitted_jobs[job_id].push(task)
     end
   end

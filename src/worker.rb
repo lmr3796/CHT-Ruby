@@ -42,9 +42,9 @@ class Worker < BaseServer
   end
 
   def log_running_time(job_id, time)
-    @logger.warn "Logs runtime to self"
+    @logger.info "Logs runtime to self"
     @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
-    @logger.warn "Logs runtime to status_checker"
+    @logger.info "Logs runtime to status_checker"
     @status_checker.log_running_time job_id, time
   end
 
@@ -55,7 +55,7 @@ class Worker < BaseServer
 
   def run_task(task, job_uuid=nil)
     if !task.is_a? Task
-      @logger.info "The input is not a task"
+      @logger.error "The input is not a task"
       raise 'Not a proper task to run'
     end
     res = nil

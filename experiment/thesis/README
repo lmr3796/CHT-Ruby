@@ -1,0 +1,6 @@
+1. Workloads (.swf files) are in standard workload format.
+Please refer to http://www.cs.huji.ac.il/labs/parallel/workload/swf.html
+
+2. I manually parsed them into .csv files
+
+3. `cht.yml' is a tmuxinator configuration file. It let's you easily launch the environments.

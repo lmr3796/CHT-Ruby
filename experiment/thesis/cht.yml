@@ -1,0 +1,72 @@
+# ~/.tmuxinator/cht.yml
+
+name: cht
+root: ~/CHT-Ruby
+
+# Optional tmux socket
+# socket_name: foo
+
+# Runs before everything. Use it to start daemons etc.
+# pre: sudo /etc/rc.d/mysqld start
+
+# Runs in each window and pane before window/pane specific commands. Useful for setting up interpreter versions.
+# pre_window: rbenv shell 2.0.0-p247
+
+# Pass command line options to tmux. Useful for specifying a different tmux.conf.
+# tmux_options: -f ~/.tmux.mac.conf
+
+# Change the command to call tmux.  This can be used by derivatives/wrappers like byobu.
+# tmux_command: byobu
+
+pre: for (( i=1 ; i <= 12 ; i=i+1 )); do ssh cloud`printf %02d $i` killall ruby; done # Kills all workers :"")
+windows:
+  - test:
+      layout: main-vertical
+      panes:
+        - cd experiment/thesis
+        - ruby status_checker_runner.rb
+        - ruby decision_maker_runner.rb
+        - ruby dispatcher_runner.rb
+  - workers:
+      layout: tile
+      panes:
+        - 1:
+            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 2:
+            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 3:
+            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 4:
+            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 5:
+            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 6:
+            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 7:
+            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 8:
+            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 9:
+            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 10:
+            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 11:
+            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 12:
+            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 13:
+            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 14:
+            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 15:
+            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 16:
+            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 17:
+            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 18:
+            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+        - 19:
+            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+        - 20:
+            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
