@@ -9,37 +9,41 @@ class ReadWriteLock
 
   def with_read_lock()
     require_read_lock
-    yield
+    result = yield
   ensure
     release_read_lock
+    return result
   end
 
   def with_write_lock()
     require_write_lock
-    yield
+    result = yield
   ensure
     release_write_lock
+    return result
   end
 
   def require_read_lock()
-    @mutex.lock()
-    @read_count = @read_count + 1
-    @write.lock if @read_count == 1
-    @mutex.unlock()
+    @mutex.synchronize do
+      @write.lock if @read_count == 0
+      @read_count += 1
+    end
   end
 
   def release_read_lock()
-    @mutex.lock()
-    @read_count = @read_count - 1
-    @write.unlock if @read_count == 0
-    @mutex.unlock()
+    @mutex.synchronize do
+      @read_count -= 1
+      @write.unlock if @read_count == 0 && @write.owned?
+    end
   end
 
   def require_write_lock()
-    @write.lock
+    @write.lock unless @write.owned?
   end
 
   def release_write_lock()
     @write.unlock
   end
+  private :require_read_lock, :require_write_lock,
+    :release_read_lock, :release_write_lock
 end
