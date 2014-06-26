@@ -3,7 +3,7 @@ require 'thread'
 class ReadWriteLock
   def initialize()
     @mutex = Mutex.new
-    @write = Mutex.new
+    @rwlock = Mutex.new
     @read_count = 0
   end
 
@@ -25,25 +25,31 @@ class ReadWriteLock
 
   def require_read_lock()
     @mutex.synchronize do
-      @write.lock if @read_count == 0
+      @rwlock.lock if @read_count == 0
       @read_count += 1
     end
+    p "Read lock acquired"
   end
 
   def release_read_lock()
     @mutex.synchronize do
+      raise "@read_count corrupted" if @read_count <= 0
       @read_count -= 1
-      @write.unlock if @read_count == 0 && @write.owned?
+      @rwlock.unlock if @read_count == 0
     end
+    p "Read lock released"
   end
 
   def require_write_lock()
-    @write.lock unless @write.owned?
+    @rwlock.lock
+    p "Write lock acquired"
   end
 
   def release_write_lock()
-    @write.unlock
+    @rwlock.unlock
+    p "Write lock released"
   end
+
   private :require_read_lock, :require_write_lock,
     :release_read_lock, :release_write_lock
 end
