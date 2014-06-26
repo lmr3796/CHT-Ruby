@@ -6,12 +6,54 @@ require 'securerandom'
 
 require_relative 'base_server'
 require_relative 'job.rb'
+require_relative 'common/read_write_lock'
+
+class TaskResult
+  def initialize()
+  end
+end
+class TaskResultManager
+  def initialize()
+    @lock = ReadWriteLock.new
+    @task_result = Hash.new {|h,k| h[k] = []}
+    @task_result_by_client = Hash.new {|h,k| h[k] = []} # Contains job_id
+  end
+  def get_result_by_client(client_id)
+    @lock.with_read_lock do
+      @task_result_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
+    end
+  end
+  def add_result(client_id, job_id, result)
+    result.is_a? TaskResult or raise ArgumentError
+    @lock.with_write_lock do
+      @task_result[job_id] << result
+      @task_result_by_client[client_id] << job_id unless @task_result_by_client[client_id].include? job_id
+    end
+  end
+  def clear_result(job_id)  # This is different from delete_result while this keeps entry
+    @lock.with_write_lock do
+      @task_result[job_id].clear
+    end
+  end
+  def delete_result(key={})
+    key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
+    @lock.with_write_lock do
+      if key.has_key? :client_id and key.has_key? :job_id_list
+        @task_result.delete_if{|k,v| (@task_result_by_client[:client_id] & key[:job_id_list]).include? k}
+      elsif key.has_key? :client_id
+        @task_result.delete_if{|k,v| key[:client_id].map{|c|task_result_by_client[c]}.flatten.include? k}
+      else
+        raise NotImplementedError
+      end
+    end
+  end
+end
 
 class Worker < BaseServer
   attr_reader :name, :status, :id, :avg_running_time
   attr_writer :status_checker
 
-  LEARNING_RATE = 0.2
+  LEARNING_RATE = 0.2         # Rate of updating avg exec time
 
   module STATUS
     DOWN       = :DOWN
