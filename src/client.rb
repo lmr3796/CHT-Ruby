@@ -9,8 +9,58 @@ require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
+class MessageService
+  def << (m)
+    @msg_queue << m
+  end
+  def initialize(uuid, dispatcher, logger)
+    @msg_queue = Queue.new
+    @uuid = uuid
+    @dispatcher = dispatcher
+    @logger=logger
+
+    # Producer && consumer
+    @notification_thr = Thread.new do
+      Thread.stop # Don't run immediately, wait for client to start
+      poll_message
+    end
+    @process_thr = Thread.new do
+      Thread.stop # Don't run immediately, wait for client to start
+      process_message_queue
+    end
+    @logger.info "Initialized message service; uuid=#{@uuid}"
+  end
+  def start
+    @logger.info "Running message service; uuid=#{@uuid}"
+    @notification_thr.run
+    @process_thr.run
+  end
+  def stop
+    @notification_thr.kill
+    @process_thr.kill
+  end
+  def poll_message
+    loop do
+      begin
+        msg = @dispatcher.get_message @uuid
+        @logger.debug "Received #{msg.inspect}" unless msg == nil || msg.empty?
+        msg.each {|m| @msg_queue << m}
+      rescue Timeout::Error
+        retry
+      end
+    end
+  end
+  def process_message_queue
+    loop do
+      msg = @msg_queue.pop
+      msg.each do|m|
+        #TODO implement handler
+      end
+    end
+  end
+end
 class Client
-  attr_accessor :jobs, :result
+  attr_accessor :jobs, :result, :logger
   attr_reader :uuid
   DEFAULT_THREAD_POOL_SIZE = 32
 
@@ -23,33 +73,20 @@ class Client
     @logger = logger
   end
 
-  def register
-    @uuid = @dispatcher.register_client
-    @logger.info "Registered client to the system, uuid=#{@id}"
-    @notification_thr = Thread.new do
-      Thread.stop # Don't run immediately, wait for client to start
-      loop do
-        begin
-          msg = @dispatcher.get_message self
-          @logger.debug "Received #{msg.inspect}" unless msg == nil || msg.empty?
-        rescue Timeout::Error
-          retry
-        end
-      end
-    end
-  end
-
   def stop()
+    @msg_service.stop
     @dispatcher.unregister_client(self)
     @logger.info "Unregistered from the system"
   end
 
   def start(blocking=false)
     # DEBUG!!!
-    register
+    @uuid = @dispatcher.register_client
+    @logger.info "Registered client to the system, uuid=#{@uuid}"
+    @msg_service = MessageService.new(@uuid, @dispatcher, @logger)
+    @msg_service.start
+
     # TODO: send_jobs
-    @logger.info "Running notification service."
-    @notification_thr.run
     return
     # DEBUG!!!
     job_id_list = send_jobs(@jobs)

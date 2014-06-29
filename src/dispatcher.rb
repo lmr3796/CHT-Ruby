@@ -132,12 +132,12 @@ class Dispatcher < BaseServer
   def push_message(client_id, message)
     @client_message_queue[client_id] << message
   end
-  def get_message(client, timeout_limit=5)
+  def get_message(client_id, timeout_limit=5)
     msg = []
     Timeout::timeout(timeout_limit) do
       loop do # collect all as a batch
-        msg << @client_message_queue[client.uuid].pop
-        break if @client_message_queue[client.uuid].empty?
+        msg << @client_message_queue[client_id].pop
+        break if @client_message_queue[client_id].empty?
       end
     end
   rescue Timeout::Error  #This rescue is very necessary since DRb seems to catch it outside :P
