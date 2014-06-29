@@ -53,3 +53,15 @@ class Task
     @args = args
   end
 end
+
+class TaskResult
+  attr_accessor :status, :stdout, :stderr, :run_time
+  def initialize(task_id, job_id, arg={})
+    @task_id = task_id
+    @job_id = job_id
+    @status = arg[:status]
+    @stdout = arg[:stdout]
+    @stderr = arg[:stderr]
+    @run_time = arg[:run_time]
+  end
+end
