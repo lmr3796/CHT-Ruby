@@ -1,4 +1,5 @@
 require 'thread'
+require 'timeout'
 require 'securerandom'
 
 require_relative 'base_server'
@@ -7,6 +8,7 @@ require_relative 'common/read_write_lock_hash'
 
 class Dispatcher < BaseServer
   attr_writer :status_checker, :decision_maker
+  attr_reader :client_message_queue
 
   class JobList < ReadWriteLockHash
     def initialize(logger)
@@ -112,9 +114,29 @@ class Dispatcher < BaseServer
       :decision_maker => @decision_maker,
       :logger => @logger
     @job_list.subscribe_job_list_change(self) # Make sure it subscribes after schedule manager
+    @client_message_queue = ReadWriteLockHash.new
   end
 
   # Client APIs
+  def register_client
+    client_id = SecureRandom.uuid
+    @client_message_queue[client_id] = Queue.new
+    @logger.info "Client #{client_id} registered."
+    return client_id
+  end
+  def unregister_client(client)
+    @client_message_queue[client.id].clear
+    @client_message_queue.delete client.id
+    @logger.info "Client #{client.id} unregistered."
+  end
+  def push_message(client_id, message)
+    @client_message_queue[client_id] << message
+  end
+  def get_message(client_id, timeout=5)
+    return @client_message_queue[client.uuid].pop(true) if timeout == nil
+    return Timeout::timeout(timeout) {@client_message_queue[client.uuid].pop}
+  end
+
   def submit_jobs(job_list)
     job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @logger.info "Job submitted: #{job_id_table.keys}"
@@ -142,9 +164,12 @@ class Dispatcher < BaseServer
   end
 
   # Worker APIs
+  def on_task_done(worker, client_id, job_id)
+  end
+
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
-    @resource_mutex.synchronize {
+    @resource_mutex.synchronize do
       next_job_assigned = @schedule_manager.worker_job_table[worker]
       @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
       return unless @job_worker_queues[next_job_assigned]
@@ -154,9 +179,8 @@ class Dispatcher < BaseServer
       @job_worker_queues[next_job_assigned].push(worker)
       @status_checker.occupy_worker worker
       @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
-    }
+    end
   end
-
 
   # General APIs
   def worker_status()

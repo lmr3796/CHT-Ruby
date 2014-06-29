@@ -11,6 +11,7 @@ require_relative 'common/thread_pool'
 
 class Client
   attr_accessor :jobs, :result
+  attr_reader :id
   DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
@@ -22,7 +23,32 @@ class Client
     @logger = logger
   end
 
+  def register
+    @id = @dispatcher.register_client
+    @logger.info "Registered client to the system, uuid=#{@id}"
+    @notification_thr = Thread.new do
+      Thread.stop # Don't run immediately, wait for client to start
+      loop do
+        begin
+          puts @dispatcher.get_message @id
+        rescue Timeout::Error
+          retry
+        end
+      end
+    end
+  end
+
   def start(blocking=false)
+    # DEBUG!!!
+    register
+    # TODO: send_jobs
+    @logger.info "Running notification service."
+    @notification_thr.run
+    sleep 100
+    @dispatcher.unregister_client(self)
+    @logger.info "Unregistered from the system"
+    return
+    # DEBUG!!!
     job_id_list = send_jobs(@jobs)
     # TODO a better way to send out result
     @result = Array.new(job_id_list.size){Hash.new}
