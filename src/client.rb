@@ -31,7 +31,7 @@ class Client
       loop do
         begin
           msg = @dispatcher.get_message self
-          @logger.debug "Received #{msg.inspect}" unless msg == nil
+          @logger.debug "Received #{msg.inspect}" unless msg == nil || msg.empty?
         rescue Timeout::Error
           retry
         end
