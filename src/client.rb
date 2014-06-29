@@ -11,7 +11,7 @@ require_relative 'common/thread_pool'
 
 class Client
   attr_accessor :jobs, :result
-  attr_reader :id
+  attr_reader :uuid
   DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
@@ -24,18 +24,24 @@ class Client
   end
 
   def register
-    @id = @dispatcher.register_client
+    @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@id}"
     @notification_thr = Thread.new do
       Thread.stop # Don't run immediately, wait for client to start
       loop do
         begin
-          puts @dispatcher.get_message @id
+          msg = @dispatcher.get_message self
+          @logger.debug "Received #{msg.inspect}" unless msg == nil
         rescue Timeout::Error
           retry
         end
       end
     end
+  end
+
+  def stop()
+    @dispatcher.unregister_client(self)
+    @logger.info "Unregistered from the system"
   end
 
   def start(blocking=false)
@@ -44,9 +50,6 @@ class Client
     # TODO: send_jobs
     @logger.info "Running notification service."
     @notification_thr.run
-    sleep 100
-    @dispatcher.unregister_client(self)
-    @logger.info "Unregistered from the system"
     return
     # DEBUG!!!
     job_id_list = send_jobs(@jobs)
@@ -120,8 +123,8 @@ class Client
     begin
       worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
       res = worker_server.run_task(task, job_id)
-      @logger.debug "#{job_id} received result from worker #{worker} in #{res[:elapsed]} seconds"
-      worker_server.log_running_time job_id, res[:elapsed]
+      @logger.debug "#{job_id} received result from worker #{worker} in #{res.run_time} seconds"
+      worker_server.log_running_time job_id, res.run_time
       worker_server.release
       @logger.debug "#{job_id} released worker #{worker}"
       @dispatcher.one_task_done(job_id)

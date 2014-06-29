@@ -125,16 +125,17 @@ class Dispatcher < BaseServer
     return client_id
   end
   def unregister_client(client)
-    @client_message_queue[client.id].clear
-    @client_message_queue.delete client.id
-    @logger.info "Client #{client.id} unregistered."
+    @client_message_queue[client.uuid].clear
+    @client_message_queue.delete client.uuid
+    @logger.info "Client #{client.uuid} unregistered."
   end
   def push_message(client_id, message)
     @client_message_queue[client_id] << message
   end
-  def get_message(client_id, timeout=5)
-    return @client_message_queue[client.uuid].pop(true) if timeout == nil
-    return Timeout::timeout(timeout) {@client_message_queue[client.uuid].pop}
+  def get_message(client, timeout_limit=5)
+    return Timeout::timeout(timeout_limit) {@client_message_queue[client.uuid].pop}
+  rescue Timeout::Error  #This rescue is very necessary since DRb seems to catch it outside :P
+    return nil
   end
 
   def submit_jobs(job_list)
