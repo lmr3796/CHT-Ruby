@@ -54,4 +54,5 @@ worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port =>
 DRb.start_service worker_druby_uri, worker
 $stderr.puts "Worker #{options[:name]} running on #{worker_druby_uri}..."
 worker.register # Must registier only after service started
+worker.start
 DRb.thread.join

@@ -92,18 +92,35 @@ class Worker < BaseServer
     @status_checker.release_worker @name
   end
 
-  def run_task(task, task_id, job_uuid, client_id)
+  def submit_task(task, job_uuid, client_id)
     task.is_a? Task or raise ArgumentError
-    result = nil
+    # TODO verify job_uuid && client_id
     @lock.synchronize do  # Worker is dedicated
-      @status_checker.worker_running @name
-      @logger.info "Running task of job #{job_uuid}"
-      result = run_cmd(task.cmd, *task.args)
-      log_running_time(job_uuid, result.run_time)
-      @logger.info "Finished task of job #{job_uuid} in #{result.run_time} seconds"
+      @task_to_run = {:task => task, :job_uuid=>job_uuid, :client_id=>client_id}
     end
-    @result_manager.add_result(client_id, TaskResult.new(task_id, job_uuid, result))
-    # TODO notifies dispatcher for completion
+    Thread::main.run
+  end
+
+  def start
+    loop do
+      Thread.stop if @task_to_run == nil
+      $stderr.puts "Awake"
+      @lock.synchronize do  # Worker is dedicated
+        run_task(@task_to_run[:task], @task_to_run[:job_uuid], @task_to_run[:client_id])
+        @task_to_run = nil
+        # TODO notifies dispatcher for completion
+      end
+    end
+  end
+
+  def run_task(task, job_uuid, client_id)
+    task.is_a? Task or raise ArgumentError
+    @status_checker.worker_running @name
+    @logger.info "Running task of job #{job_uuid}"
+    result = run_cmd(task.cmd, *task.args)
+    log_running_time(job_uuid, result.run_time)
+    @logger.info "Finished task of job #{job_uuid} in #{result.run_time} seconds"
+    @result_manager.add_result(client_id, TaskResult.new(task.id, job_uuid, result))
   end
 
   def run_cmd(command, *args)
