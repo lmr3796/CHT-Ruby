@@ -26,6 +26,16 @@ module MessageHandler
   rescue ThreadError # On empty task Queue
     #TODO some notification to dispatcher????
   end
+
+  def on_task_result_available(m)
+    job_id = m[:job_id]
+    task_id = m[:task_id]
+    return if @results[job_id][task_id] != nil  # Outdated result message
+    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri m[:worker]
+    results = worker_server.get_results(@uuid)
+    add_results(results, job_id)
+    # TODO if result of task ID is still nil, take it as lost and require re-execution
+  end
 end
 
 class MessageService
@@ -93,16 +103,17 @@ end
 
 class Client
   include MessageHandler
-  attr_accessor :jobs, :result, :logger
-  attr_reader :uuid
+  attr_accessor :jobs, :logger
+  attr_reader :uuid, :results
   DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
     DRb.start_service
     @submitted_jobs = ReadWriteLockHash.new
     @thread_pool = ThreadPool.new(thread_pool_size)
-    @dispatcher = DRbObject.new_with_uri dispatcher_uri
+    @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
+    @results = {}
     @logger = logger
   end
 
@@ -117,6 +128,7 @@ class Client
   end
 
   def start(blocking=false)
+    @rwlock = ReadWriteLock.new
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
     @msg_service = MessageService.new(@uuid, @dispatcher, self)
@@ -139,29 +151,31 @@ class Client
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index do |job_id, i|
-      task_queue = Queue.new  # task_queue of a job must be synchronized for it's consumed under multithreaded env.
-      jobs[i].task.each {|t| task_queue << t}
-      @submitted_jobs[job_id] = task_queue
+      @submitted_jobs[job_id] = {
+        :task_queue => Queue.new, # task_queue of a job must be synchronized for it's consumed under multithreaded env.
+        :job => jobs[i]
+      }
+      j.task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
+      @results[job_id] = [nil] * jobs[i].task.size
     end
     return job_id_list
   end
 
-  #def run_task_on_worker(task, job_id, worker)
-  #  # TODO: Task execution failure???
-  #  @logger.debug "#{job_id} popped a task to worker #{worker}"
-  #  begin
-  #    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
-  #    res = worker_server.run_task(task, job_id)
-  #    @logger.debug "#{job_id} received result from worker #{worker} in #{res.run_time} seconds"
-  #    worker_server.log_running_time job_id, res.run_time
-  #    worker_server.release
-  #    @logger.debug "#{job_id} released worker #{worker}"
-  #    @dispatcher.one_task_done(job_id)
-  #  rescue Exception => e
-  #    @logger.error "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
-  #    @submitted_jobs[job_id].push(task)
-  #  end
-  #end
-  private :run_task_on_worker
+  def add_results(results, job_id)
+    raise ArgumentError if results == nil
+    raise ArgumentError if job_id == nil
+    results = [r] unless r.is_a? Array
+    results.each do |r|
+      r == nil || r.is_a?(TaskResult) or raise ArgumentError, 'Invalid TaskResult(s)'
+      r.job_id == job_id or raise ArgumentError, 'Job id mismatched'
+    end
+    @rwlock.with_write_lock do
+      results.each do |r|
+        raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id || r.task_id < 0
+        raise 'Conflicted result' if @results[job_id][r.task_id] != nil
+        @results[job_id][r.task_id] = r
+      end
+    end # assign only on no result
+  end
 
 end
