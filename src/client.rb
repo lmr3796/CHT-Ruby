@@ -11,21 +11,20 @@ require_relative 'common/thread_pool'
 
 
 module MessageHandler
-  def logger
-    return @logger
-  end
-
-  # Implement handlers here, message {:type => [type]...} will dynamically
-  # invokes on_[type] with message passed as the only parameter
-  def on_chat(m)
+  # Implement handlers here, message {:type => [type]...} will use kernel#send
+  # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
+  # the only parameter.
+  def on_chat(m)  # For testing :P
     @logger.debug "on_chat: Received \"#{m[:str]}\""
   end
 
   def on_worker_available(m)
-    task = @submitted_job[m[:job_id]].pop
+    task = @submitted_job[m[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
     @logger.debug "#{job_id} popped a task to worker #{worker}"
     worker_server.submit_task(task, job_id, @uuid)
+  rescue ThreadError # On empty task Queue
+    #TODO some notification to dispatcher????
   end
 end
 
@@ -81,7 +80,7 @@ class MessageService
       begin
         handler_name = "on_#{m[:type].to_s}"
         @handler.respond_to?(handler_name) ?
-          @handler.send(handler_name,m) :
+          @handler.send(handler_name, m) :  # The ruby way to invoke method by its name string
           @logger.warn("No handler #{handler_name} for #{m[:type]} found, msg=#{m.inspect}")
       rescue => e
         @logger.warn("Error on parsing message, msg=#{m.inspect}")
@@ -124,16 +123,6 @@ class Client
     @msg_service.start
 
     #TODO: register on worker available handler
-
-    #job_id_list = send_jobs(@jobs)
-    ## TODO a better way to send out result
-    #@result = Array.new(job_id_list.size){Hash.new}
-    #@thread_id_list = job_id_list.each_with_index.map{ |job_id,i|
-    #  @result[i][:deadline] = @jobs[i].deadline
-    #  @thread_pool.schedule{
-    #    run_job(job_id, i)
-    #  }
-    #}
     return @thread_id_list unless blocking
     wait_all
   end
