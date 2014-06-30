@@ -14,8 +14,18 @@ module MessageHandler
   def logger
     return @logger
   end
+
+  # Implement handlers here, message {:type => [type]...} will dynamically
+  # invokes on_[type] with message passed as the only parameter
   def on_chat(m)
     @logger.debug "on_chat: Received \"#{m[:str]}\""
+  end
+
+  def on_worker_available(m)
+    task = @submitted_job[m[:job_id]].pop
+    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
+    @logger.debug "#{job_id} popped a task to worker #{worker}"
+    worker_server.submit_task(task, job_id, @uuid)
   end
 end
 
@@ -40,18 +50,22 @@ class MessageService
     end
     @logger.info "Initialized message service; uuid=#{@uuid}"
   end
+
   def << (m)
     @msg_queue << m
   end
+
   def start
     @logger.info "Running message service; uuid=#{@uuid}"
     @notification_thr.run
     @process_thr.run
   end
+
   def stop
     @notification_thr.kill
     @process_thr.kill
   end
+
   def poll_message
     loop do
       # Timeout must be implemented on server side since drb won't release wait on error...
@@ -60,6 +74,7 @@ class MessageService
       msg.each {|m| @msg_queue << m}
     end
   end
+
   def process_message_queue
     loop do
       m = @msg_queue.pop
@@ -142,22 +157,22 @@ class Client
     return job_id_list
   end
 
-  def run_task_on_worker(task, job_id, worker)
-    # TODO: Task execution failure???
-    @logger.debug "#{job_id} popped a task to worker #{worker}"
-    begin
-      worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
-      res = worker_server.run_task(task, job_id)
-      @logger.debug "#{job_id} received result from worker #{worker} in #{res.run_time} seconds"
-      worker_server.log_running_time job_id, res.run_time
-      worker_server.release
-      @logger.debug "#{job_id} released worker #{worker}"
-      @dispatcher.one_task_done(job_id)
-    rescue Exception => e
-      @logger.error "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
-      @submitted_jobs[job_id].push(task)
-    end
-  end
+  #def run_task_on_worker(task, job_id, worker)
+  #  # TODO: Task execution failure???
+  #  @logger.debug "#{job_id} popped a task to worker #{worker}"
+  #  begin
+  #    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
+  #    res = worker_server.run_task(task, job_id)
+  #    @logger.debug "#{job_id} received result from worker #{worker} in #{res.run_time} seconds"
+  #    worker_server.log_running_time job_id, res.run_time
+  #    worker_server.release
+  #    @logger.debug "#{job_id} released worker #{worker}"
+  #    @dispatcher.one_task_done(job_id)
+  #  rescue Exception => e
+  #    @logger.error "#{job_id} exception raised by worker #{worker}: \"#{e.message}\", add task back to queue"
+  #    @submitted_jobs[job_id].push(task)
+  #  end
+  #end
   private :run_task_on_worker
 
 end

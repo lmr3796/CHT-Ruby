@@ -12,6 +12,7 @@ class Job
     @task_remaining = Atomic.new(0)
   end
   def add_task(t)
+    t.id = @task.size
     @task_remaining.update do |value|
       @task << t
       value + 1
@@ -47,6 +48,7 @@ class Job
 end
 
 class Task
+  attr_accessor :id
   attr_reader :cmd, :args
   def initialize(cmd, args=nil)
     @cmd = cmd
