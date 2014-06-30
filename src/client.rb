@@ -4,20 +4,30 @@ require 'thread'
 require 'time'
 require 'sync'
 
+require_relative 'dispatcher'
 require_relative 'job'
 require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
-class MessageService
-  def << (m)
-    @msg_queue << m
+module MessageHandler
+  def logger
+    return @logger
   end
-  def initialize(uuid, dispatcher, logger)
+  def on_chat(m)
+    @logger.debug "on_chat: Received \"#{m[:str]}\""
+  end
+end
+
+class MessageService
+  def initialize(uuid, dispatcher, handler)
+    uuid.is_a? String or raise ArgumentError
+    handler.is_a? MessageHandler or raise ArgumentError
     @msg_queue = Queue.new
     @uuid = uuid
     @dispatcher = dispatcher
-    @logger=logger
+    @handler = handler
+    @logger = @handler.logger
 
     # Producer && consumer
     @notification_thr = Thread.new do
@@ -30,6 +40,9 @@ class MessageService
     end
     @logger.info "Initialized message service; uuid=#{@uuid}"
   end
+  def << (m)
+    @msg_queue << m
+  end
   def start
     @logger.info "Running message service; uuid=#{@uuid}"
     @notification_thr.run
@@ -41,25 +54,31 @@ class MessageService
   end
   def poll_message
     loop do
-      begin
-        msg = @dispatcher.get_message @uuid
-        @logger.debug "Received #{msg.inspect}" unless msg == nil || msg.empty?
-        msg.each {|m| @msg_queue << m}
-      rescue Timeout::Error
-        retry
-      end
+      # Timeout must be implemented on server side since drb won't release wait on error...
+      msg = @dispatcher.get_message @uuid
+      next if msg.empty?
+      msg.each {|m| @msg_queue << m}
     end
   end
   def process_message_queue
     loop do
-      msg = @msg_queue.pop
-      msg.each do|m|
-        #TODO implement handler
+      m = @msg_queue.pop
+      begin
+        handler_name = "on_#{m[:type].to_s}"
+        @handler.respond_to?(handler_name) ?
+          @handler.send(handler_name,m) :
+          @logger.warn("No handler #{handler_name} for #{m[:type]} found, msg=#{m.inspect}")
+      rescue => e
+        @logger.warn("Error on parsing message, msg=#{m.inspect}")
+        @logger.warn e.message
+        @logger.warn e.backtrace.join("\n")
       end
     end
   end
 end
+
 class Client
+  include MessageHandler
   attr_accessor :jobs, :result, :logger
   attr_reader :uuid
   DEFAULT_THREAD_POOL_SIZE = 32
@@ -86,7 +105,7 @@ class Client
   def start(blocking=false)
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
-    @msg_service = MessageService.new(@uuid, @dispatcher, @logger)
+    @msg_service = MessageService.new(@uuid, @dispatcher, self)
     @msg_service.start
 
     #TODO: register on worker available handler

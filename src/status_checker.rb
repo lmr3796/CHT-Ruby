@@ -49,10 +49,10 @@ class StatusChecker < BaseServer
     end
   end
   def register_worker(worker)
-    @lock.with_write_lock {
+    @lock.with_write_lock do
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
       @logger.info "Worker: #{worker} registered; set to AVAILABLE"
-    }
+    end
     @logger.info 'Asked to reschedule'
     begin
       @dispatcher.reschedule
@@ -64,23 +64,23 @@ class StatusChecker < BaseServer
     @dispatcher.on_worker_available(worker)
   end
   def release_worker(worker, notify=true)
-    @lock.with_write_lock {
+    @lock.with_write_lock do
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
       @logger.info "Released worker: #{worker}"
-    }
+    end
     @dispatcher.on_worker_available(worker) if notify
   end
   def occupy_worker(worker)
-    @lock.with_write_lock {
+    @lock.with_write_lock do
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
       @logger.info "Occupied worker: #{worker}"
-    }
+    end
   end
   def worker_running(worker)
-    @lock.with_write_lock {
+    @lock.with_write_lock do
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
       @logger.info "Mark running worker: #{worker}"
-    }
+    end
   end
   def collect_status(workers=@worker_table.keys)
     @logger.info "Collecting status"
