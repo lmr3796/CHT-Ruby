@@ -21,11 +21,13 @@ module ClientMessageHandler include MessageService::MessageHandler
 
   def on_worker_available(m)
     task = @submitted_job[m[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
-    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
-    @logger.debug "#{job_id} popped a task to worker #{worker}"
+    worker = m[:worker]
+    worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     worker_server.submit_task(task, job_id, @uuid)
     @dispatcher.task_sent(job_id)
+    @logger.debug "#{job_id} popped a task to worker #{worker}"
   rescue ThreadError # On empty task Queue
+    @logger.warn "#{job_id} received worker #{worker} but no task to process"
     #TODO some notification to dispatcher????
   end
 
