@@ -6,11 +6,12 @@ require 'sync'
 
 require_relative 'dispatcher'
 require_relative 'job'
+require_relative 'message_service'
 require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
-module MessageHandler
+module ClientMessageHandler include MessageService::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
@@ -23,86 +24,24 @@ module MessageHandler
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri worker
     @logger.debug "#{job_id} popped a task to worker #{worker}"
     worker_server.submit_task(task, job_id, @uuid)
+    @dispatcher.task_sent(job_id)
   rescue ThreadError # On empty task Queue
     #TODO some notification to dispatcher????
   end
 
   def on_task_result_available(m)
+    return if @results[m[:job_id]][m[:task_id]] != nil  # Outdated result message
     job_id = m[:job_id]
     task_id = m[:task_id]
-    return if @results[job_id][task_id] != nil  # Outdated result message
     worker_server = DRbObject.new_with_uri @dispatcher.worker_uri m[:worker]
     results = worker_server.get_results(@uuid)
     add_results(results, job_id)
-    # TODO if result of task ID is still nil, take it as lost and require re-execution
-  end
-end
-
-class MessageService
-  def initialize(uuid, dispatcher, handler)
-    uuid.is_a? String or raise ArgumentError
-    handler.is_a? MessageHandler or raise ArgumentError
-    @msg_queue = Queue.new
-    @uuid = uuid
-    @dispatcher = dispatcher
-    @handler = handler
-    @logger = @handler.logger
-
-    # Producer && consumer
-    @notification_thr = Thread.new do
-      Thread.stop # Don't run immediately, wait for client to start
-      poll_message
-    end
-    @process_thr = Thread.new do
-      Thread.stop # Don't run immediately, wait for client to start
-      process_message_queue
-    end
-    @logger.info "Initialized message service; uuid=#{@uuid}"
-  end
-
-  def << (m)
-    @msg_queue << m
-  end
-
-  def start
-    @logger.info "Running message service; uuid=#{@uuid}"
-    @notification_thr.run
-    @process_thr.run
-  end
-
-  def stop
-    @notification_thr.kill
-    @process_thr.kill
-  end
-
-  def poll_message
-    loop do
-      # Timeout must be implemented on server side since drb won't release wait on error...
-      msg = @dispatcher.get_message @uuid
-      next if msg.empty?
-      msg.each {|m| @msg_queue << m}
-    end
-  end
-
-  def process_message_queue
-    loop do
-      m = @msg_queue.pop
-      begin
-        handler_name = "on_#{m[:type].to_s}"
-        @handler.respond_to?(handler_name) ?
-          @handler.send(handler_name, m) :  # The ruby way to invoke method by its name string
-          @logger.warn("No handler #{handler_name} for #{m[:type]} found, msg=#{m.inspect}")
-      rescue => e
-        @logger.warn("Error on parsing message, msg=#{m.inspect}")
-        @logger.warn e.message
-        @logger.warn e.backtrace.join("\n")
-      end
-    end
+    redo_task(task_id, job_id) if @results[job_id][task_id] == nil
   end
 end
 
 class Client
-  include MessageHandler
+  include ClientMessageHandler
   attr_accessor :jobs, :logger
   attr_reader :uuid, :results
   DEFAULT_THREAD_POOL_SIZE = 32
@@ -133,10 +72,8 @@ class Client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
     @msg_service = MessageService.new(@uuid, @dispatcher, self)
     @msg_service.start
-
-    #TODO: register on worker available handler
-    return @thread_id_list unless blocking
-    wait_all
+    wait_all if blocking
+    return
   end
 
   def send_jobs(jobs)
@@ -176,6 +113,11 @@ class Client
         @results[job_id][r.task_id] = r
       end
     end # assign only on no result
+  end
+
+  def redo_task(task_id, job_id)
+    @submitted_job[job_id][:task_queue] << @submitted_job[job_id][:job].task[task_id]
+    @dispatcher.redo_task(job_id)
   end
 
 end

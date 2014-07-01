@@ -24,7 +24,10 @@ class Job
       0
     end
   end
-  def one_task_done
+  def task_redo
+    @task_remaining.update {|value| value + 1}
+  end
+  def task_sent
     @task_remaining.update {|value| value - 1}
   end
   def task_remaining
