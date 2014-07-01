@@ -8,7 +8,6 @@ require_relative 'dispatcher'
 require_relative 'job'
 require_relative 'message_service'
 require_relative 'common/read_write_lock_hash'
-require_relative 'common/thread_pool'
 
 
 module ClientMessageHandler include MessageService::Client::MessageHandler
@@ -44,10 +43,9 @@ class Client
   attr_reader :uuid, :results
   DEFAULT_THREAD_POOL_SIZE = 32
 
-  def initialize(dispatcher_uri, jobs=[], thread_pool_size=DEFAULT_THREAD_POOL_SIZE, logger=Logger.new(STDERR))
+  def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
     DRb.start_service
     @submitted_jobs = ReadWriteLockHash.new
-    @thread_pool = ThreadPool.new(thread_pool_size)
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
     @results = {}
