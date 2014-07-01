@@ -11,12 +11,18 @@ require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
-module ClientMessageHandler include MessageServiceClient::MessageHandler
+module ClientMessageHandler include MessageService::Client::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
-  def on_chat(m)  # For testing :P
-    @logger.debug "on_chat: Received \"#{m[:str]}\""
+  def on_invalid_message_error(msg, err)
+    @logger.warn("Error on parsing message, msg=#{m.inspect}")
+    @logger.warn e.message
+    @logger.warn e.backtrace.join("\n")
+  end
+
+  def on_no_handler_found_error(msg, err)
+    @logger.warn("No handler #{handler_name} for #{msg[:type]} found, msg=#{msg.inspect}")
   end
 
   def on_worker_available(m)
@@ -72,8 +78,10 @@ class Client
     @rwlock = ReadWriteLock.new
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
-    @msg_service = MessageServiceClient.new(@uuid, @dispatcher, self)
+    @msg_service = MessageService::Client.new(@uuid, @dispatcher, self)
+    @logger.info "Initialized message service."
     @msg_service.start
+    @logger.info "Running message service."
     wait_all if blocking
     return
   end
@@ -121,5 +129,4 @@ class Client
     @submitted_job[job_id][:task_queue] << @submitted_job[job_id][:job].task[task_id]
     @dispatcher.redo_task(job_id)
   end
-
 end

@@ -4,13 +4,15 @@ require 'securerandom'
 
 require_relative 'base_server'
 require_relative 'decision_maker'
+require_relative 'message_service'
 require_relative 'common/read_write_lock_hash'
 
 module DispatcherClientInterface
   def register_client
     client_id = SecureRandom.uuid
-    @client_message_queue[client_id] = Queue.new
     @logger.info "Client #{client_id} registered."
+    @msg_service_server.register(client_id)
+    @logger.info "Message service of client #{client_id} registered."
     return client_id
   end
 
@@ -20,18 +22,6 @@ module DispatcherClientInterface
     @logger.info "Client #{client.uuid} unregistered."
   end
 
-  def get_message(client_id, timeout_limit=5)
-    msg = []
-    Timeout::timeout(timeout_limit) do
-      loop do # collect all as a batch
-        msg << @client_message_queue[client_id].pop
-        break if @client_message_queue[client_id].empty?
-      end
-    end
-  rescue Timeout::Error  #This rescue is very necessary since DRb seems to catch it outside :P
-  ensure
-    return msg
-  end
   def submit_jobs(job_list)
     job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
     @logger.info "Job submitted: #{job_id_table.keys}"
@@ -40,6 +30,7 @@ module DispatcherClientInterface
     @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
+
   def require_worker(job_id)
     # TODO: what if queue popped but not used? ====> more communications
     @logger.info "#{job_id} requires a worker"
@@ -47,17 +38,21 @@ module DispatcherClientInterface
     @logger.info "#{job_id} gets worker #{worker}"
     return worker
   end
+
   def task_redo(job_id)
     @job_list[job_id].task_redo
   end
+
   def task_sent(job_id)
     @job_list[job_id].task_sent
   end
+
   def job_done(job_id)
     @logger.info "#{job_id} is done"
     @job_list.delete(job_id)
   end
 end
+
 module DispatcherWorkerInterface
   # Worker APIs
   def on_task_done(worker, client_id, job_id)
@@ -79,11 +74,34 @@ module DispatcherWorkerInterface
     end
   end
 end
+
+module MessageServiceServerDelegator include MessageService::Server
+  def get_clients()
+    @msg_service_server.get_clients()
+  end
+
+  def register(client_id)
+    @msg_service_server.register(client_id)
+  end
+
+  def unregister(client_id)
+    @msg_service_server.unregister(client_id)
+  end
+
+  def push_message(client_id, message)
+    @msg_service_server.push_message(client_id, message)
+  end
+
+  def get_message(client_id, timeout_limit=5)
+    @msg_service_server.get_message(client_id, timeout_limit)
+  end
+end
+
 class Dispatcher < BaseServer
   include DispatcherClientInterface
   include DispatcherWorkerInterface
+  include MessageServiceServerDelegator
   attr_writer :status_checker, :decision_maker
-  attr_reader :client_message_queue
 
   class JobList < ReadWriteLockHash
     def initialize(logger)
@@ -124,7 +142,6 @@ class Dispatcher < BaseServer
       publish_job_submitted(keys)
       return self
     end
-
   end
 
   class ScheduleManager
@@ -189,11 +206,8 @@ class Dispatcher < BaseServer
       :decision_maker => @decision_maker,
       :logger => @logger
     @job_list.subscribe_job_list_change(self) # Make sure it subscribes after schedule manager
-    @client_message_queue = ReadWriteLockHash.new
-  end
-
-  def push_message(client_id, message)
-    @client_message_queue[client_id] << message
+    #@client_message_queue = ReadWriteLockHash.new
+    @msg_service_server = MessageService::BasicServer.new
   end
 
   def reschedule()
