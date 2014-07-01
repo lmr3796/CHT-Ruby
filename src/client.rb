@@ -69,6 +69,7 @@ class Client
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
     @msg_service = MessageService::Client.new(@uuid, @dispatcher, self)
+    @msg_service.logger = @logger
     @logger.info "Initialized message service."
     @msg_service.start
     @logger.info "Running message service."
