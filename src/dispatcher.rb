@@ -6,7 +6,82 @@ require_relative 'base_server'
 require_relative 'decision_maker'
 require_relative 'common/read_write_lock_hash'
 
+module DispatcherClientInterface
+  def register_client
+    client_id = SecureRandom.uuid
+    @client_message_queue[client_id] = Queue.new
+    @logger.info "Client #{client_id} registered."
+    return client_id
+  end
+
+  def unregister_client(client)
+    @client_message_queue[client.uuid].clear
+    @client_message_queue.delete client.uuid
+    @logger.info "Client #{client.uuid} unregistered."
+  end
+
+  def get_message(client_id, timeout_limit=5)
+    msg = []
+    Timeout::timeout(timeout_limit) do
+      loop do # collect all as a batch
+        msg << @client_message_queue[client_id].pop
+        break if @client_message_queue[client_id].empty?
+      end
+    end
+  rescue Timeout::Error  #This rescue is very necessary since DRb seems to catch it outside :P
+  ensure
+    return msg
+  end
+  def submit_jobs(job_list)
+    job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
+    @logger.info "Job submitted: #{job_id_table.keys}"
+    @job_list.merge! job_id_table
+    @logger.debug "Current jobs: #{@job_list.keys}"
+    @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
+    return job_id_table.keys  # Returning a UUID list stands for acceptance
+  end
+  def require_worker(job_id)
+    # TODO: what if queue popped but not used? ====> more communications
+    @logger.info "#{job_id} requires a worker"
+    worker = @job_worker_queues[job_id].pop()
+    @logger.info "#{job_id} gets worker #{worker}"
+    return worker
+  end
+  def task_redo(job_id)
+    @job_list[job_id].task_redo
+  end
+  def task_sent(job_id)
+    @job_list[job_id].task_sent
+  end
+  def job_done(job_id)
+    @logger.info "#{job_id} is done"
+    @job_list.delete(job_id)
+  end
+end
+module DispatcherWorkerInterface
+  # Worker APIs
+  def on_task_done(worker, client_id, job_id)
+    # TODO implement this
+  end
+
+  def on_worker_available(worker)
+    @logger.info "Worker #{worker} is available"
+    @resource_mutex.synchronize do
+      next_job_assigned = @schedule_manager.worker_job_table[worker]
+      @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
+      return unless @job_worker_queues[next_job_assigned]
+      waiting_workers_of_next_job_assigned = @job_worker_queues[next_job_assigned].size
+      waiting_threads_of_next_job_assigned = @job_worker_queues[next_job_assigned].num_waiting
+      @logger.debug "Worker #{worker} pushed to the queue of #{next_job_assigned.inspect}"
+      @job_worker_queues[next_job_assigned].push(worker)
+      @status_checker.occupy_worker worker
+      @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
+    end
+  end
+end
 class Dispatcher < BaseServer
+  include DispatcherClientInterface
+  include DispatcherWorkerInterface
   attr_writer :status_checker, :decision_maker
   attr_reader :client_message_queue
 
@@ -117,81 +192,14 @@ class Dispatcher < BaseServer
     @client_message_queue = ReadWriteLockHash.new
   end
 
-  # Client APIs
-  def register_client
-    client_id = SecureRandom.uuid
-    @client_message_queue[client_id] = Queue.new
-    @logger.info "Client #{client_id} registered."
-    return client_id
-  end
-  def unregister_client(client)
-    @client_message_queue[client.uuid].clear
-    @client_message_queue.delete client.uuid
-    @logger.info "Client #{client.uuid} unregistered."
-  end
   def push_message(client_id, message)
     @client_message_queue[client_id] << message
   end
-  def get_message(client_id, timeout_limit=5)
-    msg = []
-    Timeout::timeout(timeout_limit) do
-      loop do # collect all as a batch
-        msg << @client_message_queue[client_id].pop
-        break if @client_message_queue[client_id].empty?
-      end
-    end
-  rescue Timeout::Error  #This rescue is very necessary since DRb seems to catch it outside :P
-  ensure
-    return msg
-  end
 
-  def submit_jobs(job_list)
-    job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
-    @logger.info "Job submitted: #{job_id_table.keys}"
-    @job_list.merge! job_id_table
-    @logger.debug "Current jobs: #{@job_list.keys}"
-    @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
-    return job_id_table.keys  # Returning a UUID list stands for acceptance
-  end
-  def require_worker(job_id)
-    # TODO: what if queue popped but not used? ====> more communications
-    @logger.info "#{job_id} requires a worker"
-    worker = @job_worker_queues[job_id].pop()
-    @logger.info "#{job_id} gets worker #{worker}"
-    return worker
-  end
-  def task_redo(job_id)
-    @job_list[job_id].task_redo
-  end
-  def task_sent(job_id)
-    @job_list[job_id].task_sent
-  end
-  def job_done(job_id)
-    @logger.info "#{job_id} is done"
-    @job_list.delete(job_id)
-  end
   def reschedule()
     @schedule_manager.schedule_job
   end
 
-  # Worker APIs
-  def on_task_done(worker, client_id, job_id)
-  end
-
-  def on_worker_available(worker)
-    @logger.info "Worker #{worker} is available"
-    @resource_mutex.synchronize do
-      next_job_assigned = @schedule_manager.worker_job_table[worker]
-      @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
-      return unless @job_worker_queues[next_job_assigned]
-      waiting_workers_of_next_job_assigned = @job_worker_queues[next_job_assigned].size
-      waiting_threads_of_next_job_assigned = @job_worker_queues[next_job_assigned].num_waiting
-      @logger.debug "Worker #{worker} pushed to the queue of #{next_job_assigned.inspect}"
-      @job_worker_queues[next_job_assigned].push(worker)
-      @status_checker.occupy_worker worker
-      @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
-    end
-  end
 
   # General APIs
   def worker_status()

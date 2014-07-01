@@ -11,7 +11,7 @@ require_relative 'common/read_write_lock_hash'
 require_relative 'common/thread_pool'
 
 
-module ClientMessageHandler include MessageService::MessageHandler
+module ClientMessageHandler include MessageServiceClient::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
@@ -72,7 +72,7 @@ class Client
     @rwlock = ReadWriteLock.new
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
-    @msg_service = MessageService.new(@uuid, @dispatcher, self)
+    @msg_service = MessageServiceClient.new(@uuid, @dispatcher, self)
     @msg_service.start
     wait_all if blocking
     return
@@ -91,7 +91,7 @@ class Client
     # Build a task queue for each job, indexed with job_id returned from dispatcher
     job_id_list.each_with_index do |job_id, i|
       @submitted_jobs[job_id] = {
-        :task_queue => Queue.new, # task_queue of a job must be synchronized for it's consumed under multithreaded env.
+        :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
         :job => jobs[i]
       }
       j.task.each{|t| @submitted_jobs[job_id][:task_queue] << t}

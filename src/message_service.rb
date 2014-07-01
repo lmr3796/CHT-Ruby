@@ -1,5 +1,5 @@
 
-class MessageService
+class MessageServiceClient
   module MessageHandler
     def logger
       raise NotImplementedError
