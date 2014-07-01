@@ -15,15 +15,6 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
-  def on_invalid_message_error(msg, err)
-    @logger.warn("Error on parsing message, msg=#{m.inspect}")
-    @logger.warn e.message
-    @logger.warn e.backtrace.join("\n")
-  end
-
-  def on_no_handler_found_error(msg, err)
-    @logger.warn("No handler #{handler_name} for #{msg[:type]} found, msg=#{msg.inspect}")
-  end
 
   def on_worker_available(m)
     task = @submitted_job[m[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
@@ -50,7 +41,6 @@ end
 
 class Client
   include ClientMessageHandler
-  attr_accessor :jobs, :logger
   attr_reader :uuid, :results
   DEFAULT_THREAD_POOL_SIZE = 32
 

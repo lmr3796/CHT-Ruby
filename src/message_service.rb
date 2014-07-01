@@ -1,8 +1,31 @@
 require_relative 'common/read_write_lock_hash'
 
 module MessageService
+  class InvalidMessageError; end
   class Message
+    attr_accessor :type, :content, :message
+    def initialize(type, content=nil, message='')
+      self.type = type
+      self.content = content
+      self.message = message
+    end
+
+    def type=(t)
+      t.is_a? Symbol or raise ArgumentError
+      @type = t
+    end
+
+    def content=(c)
+      c == nil || c.is_a?(Hash) or raise ArgumentError
+      @content = c
+    end
+
+    def message=(m)
+      m.is_a? String or raise ArgumentError
+      @message = m
+    end
   end
+
   module Server
     def get_clients()
       raise NotImplementedError
@@ -65,15 +88,21 @@ module MessageService
   class Client
     module MessageHandler
       def on_chat(m)  # For testing :P
-        @logger.debug "on_chat: Received \"#{m[:str]}\""
+        @logger.debug "on_chat: Received \"#{m.message}\""
       end
 
-      def on_invalid_message_error(e)
-        raise NotImplementedError
+      def on_process_message_error(m, e)
+        $stderr.p m
+        $stderr.p e.message
+        $stderr.p e.backtrace
       end
 
-      def on_no_handler_found_error(e)
-        raise NotImplementedError
+      def on_invalid_message_error(m, e)
+        $stderr.p m, e.message, e.backtrace
+      end
+
+      def on_no_handler_found_error(m, e)
+        $stderr.p m, e.message, e.backtrace
       end
     end
 
@@ -123,15 +152,19 @@ module MessageService
     def process_message_queue
       loop do
         m = @msg_queue.pop
+        m.is_a? Message or raise InvalidMessageError
         begin
-          handler_name = "on_#{m[:type].to_s}"
+          handler_name = "on_#{m.type.to_s}"
           @handler.respond_to?(handler_name) ?
             @handler.send(handler_name, m) :  # The ruby way to invoke method by its name string
-            on_no_handler_found_error(m, e)
+            @handler.on_no_handler_found_error(m, e)
+        rescue InvalidMessageError => e
+          @handler.on_invalid_message_error(m, e)
         rescue => e
-          on_invalid_message_error(m, e)
+          @handler.on_process_message_error(m, e)
         end
       end
     end
+
   end
 end

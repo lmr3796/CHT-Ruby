@@ -15,12 +15,14 @@ class TaskResultManager
     @task_result = Hash.new {|h,k| h[k] = []}
     @task_result_by_client = Hash.new # Contains job_id
   end
+
   def get_result_by_client(client_id)
     @rwlock.with_read_lock do
       @task_result_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
       return @task_result.select{|k,v|@task_result_by_client[client_id].include? k}
     end
   end
+
   def add_result(client_id, result)
     result.is_a? TaskResult or raise ArgumentError
     @rwlock.with_write_lock do
@@ -28,9 +30,11 @@ class TaskResultManager
       @task_result_by_client[client_id] << job_id unless @task_result_by_client[client_id].include? job_id
     end
   end
+
   def clear_result(job_id)  # This is different from delete_result while this keeps entry
     @rwlock.with_write_lock{@task_result[job_id].clear}
   end
+
   def delete_result(key={})
     key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
     @rwlock.with_write_lock do
