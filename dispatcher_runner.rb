@@ -39,7 +39,8 @@ options[:status_checker] ||= CHT_Configuration::Address::druby_uri(CHT_Configura
 options[:decision_maker] ||= CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DECISION_MAKER)
 
 if !ARGV.empty?
-  print("Unrecognized arguments: ", *ARGV, "\n")
+  print("Unrecognized arguments: ", *ARGV)
+  print("\n")
   exit(false)
 end
 
