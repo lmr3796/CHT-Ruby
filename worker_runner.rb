@@ -40,7 +40,8 @@ options[:status_checker_address] = "druby://#{options[:status_checker_address]}"
 
 
 if !ARGV.empty?
-  print("Unrecognized arguments: ", *ARGV, "\n")
+  print("Unrecognized arguments: ", *ARGV)
+  print("\n")
   exit(false)
 end
 

@@ -31,7 +31,8 @@ options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::STAT
 options[:dispatcher_addr] ||= CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER)
 
 if !ARGV.empty?
-  print("Unrecognized arguments: ", *ARGV, "\n")
+  print("Unrecognized arguments: ", *ARGV)
+  print("\n")
   exit(false)
 end
 

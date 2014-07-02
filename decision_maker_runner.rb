@@ -39,7 +39,8 @@ options[:status_checker] ||= CHT_Configuration::Address::druby_uri(CHT_Configura
 options[:algo] ||= CHT_Configuration::Algorithm::ALGORITHM
 
 if !ARGV.empty?
-  print("Unrecognized arguments: ", *ARGV, "\n")
+  print("Unrecognized arguments: ", *ARGV)
+  print("\n")
   exit(false)
 end
 
