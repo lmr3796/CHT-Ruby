@@ -1,7 +1,8 @@
 require_relative 'common/read_write_lock_hash'
 
 module MessageService
-  class InvalidMessageError; end
+  class InvalidMessageError < StandardError; end
+  class NoMatchingHandlerError < StandardError; end
   class Message
     attr_accessor :type, :content, :message
     def initialize(type, content=nil, message='')
@@ -43,6 +44,10 @@ module MessageService
       raise NotImplementedError
     end
 
+    def broadcast_message(message)
+      raise NotImplementedError
+    end
+
     def get_message(client_id, timeout_limit=5)
       raise NotImplementedError
     end
@@ -71,6 +76,10 @@ module MessageService
       @client_message_queue[client_id] << message
     end
 
+    def broadcast_message(message)
+      @client_message_queue.values.each{|q| q << message}
+    end
+
     def get_message(client_id, timeout_limit=5)
       msg = []
       Timeout::timeout(timeout_limit) do
@@ -86,23 +95,15 @@ module MessageService
   end
 
   class Client
-    module MessageHandler
+    attr_accessor :logger
+
+    module MessageHandler # Message Handler Interface to expose
       def on_chat(m)  # For testing :P
         @logger.debug "on_chat: Received \"#{m.message}\""
       end
 
-      def on_process_message_error(m, e)
-        $stderr.p m
-        $stderr.p e.message
-        $stderr.p e.backtrace
-      end
-
-      def on_invalid_message_error(m, e)
-        $stderr.p m, e.message, e.backtrace
-      end
-
       def on_no_handler_found_error(m, e)
-        $stderr.p m, e.message, e.backtrace
+        @logger.warn "No handler for message #{m}"
       end
     end
 
@@ -113,6 +114,7 @@ module MessageService
       @uuid = uuid
       @msg_server = msg_server
       @handler = handler
+      @logger = Logger.new(STDERR)
 
       # Producer && consumer
       @notification_thr = Thread.new do
@@ -149,22 +151,31 @@ module MessageService
       end
     end
 
+    def process_message(m)
+      m.is_a? Message or raise InvalidMessageError
+      handler_name = "on_#{m.type.to_s}"
+      @handler.respond_to?(handler_name) or raise NoMatchingHandlerError
+      @handler.send(handler_name, m)  # The ruby way to invoke method by its name string
+    end
+
     def process_message_queue
       loop do
         m = @msg_queue.pop
         m.is_a? Message or raise InvalidMessageError
         begin
-          handler_name = "on_#{m.type.to_s}"
-          @handler.respond_to?(handler_name) ?
-            @handler.send(handler_name, m) :  # The ruby way to invoke method by its name string
-            @handler.on_no_handler_found_error(m, e)
+          process_message(m)
         rescue InvalidMessageError => e
-          @handler.on_invalid_message_error(m, e)
+          @logger.error "Message #{m} invalid"
+        rescue NoMatchingHandlerError => e
+          @handler.on_no_handler_found_error(m, e)
         rescue => e
-          @handler.on_process_message_error(m, e)
+          @logger.error "Error processing message #{m}"
+          @logger.error e.message
+          @logger.error e.backtrace.join('\n')
         end
       end
     end
 
+    private :process_message
   end
 end

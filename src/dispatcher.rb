@@ -92,6 +92,10 @@ module MessageServiceServerDelegator include MessageService::Server
     @msg_service_server.push_message(client_id, message)
   end
 
+  def broadcast_message(message)
+    @msg_service_server.broadcast_message(message)
+  end
+
   def get_message(client_id, timeout_limit=5)
     @msg_service_server.get_message(client_id, timeout_limit)
   end
