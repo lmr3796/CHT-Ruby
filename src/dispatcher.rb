@@ -107,7 +107,7 @@ class Dispatcher < BaseServer
     @job_list = JobList.new @logger
     @status_checker = arg[:status_checker]
     @decision_maker = arg[:decision_maker]
-    @schedule_manager = ScheduleManager.new @job_list, 
+    @schedule_manager = ScheduleManager.new @job_list,
       :status_checker => @status_checker,
       :decision_maker => @decision_maker,
       :logger => @logger
@@ -181,7 +181,7 @@ class Dispatcher < BaseServer
       if @job_worker_queues.has_key? job_id
         @job_worker_queues[job_id].clear
       else
-        @job_worker_queues[job_id] = Queue.new 
+        @job_worker_queues[job_id] = Queue.new
         @status_checker.register_job job_id # Can't make this an observer in status checker for dependency
       end
     end
@@ -210,7 +210,7 @@ class Dispatcher < BaseServer
     @schedule_manager.schedule_job
     @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
     @status_checker.collect_status
-    @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s| 
+    @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
       on_worker_available(w)
     end
   end
