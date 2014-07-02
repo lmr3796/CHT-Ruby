@@ -7,7 +7,7 @@ require 'sync'
 require_relative 'dispatcher'
 require_relative 'job'
 require_relative 'message_service'
-require_relative 'common/read_write_lock_hash'
+require_relative 'common/rwlock_hash'
 
 
 module ClientMessageHandler include MessageService::Client::MessageHandler

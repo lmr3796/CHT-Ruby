@@ -3,8 +3,8 @@ require 'eventmachine'
 
 require_relative 'base_server'
 require_relative 'worker'
-require_relative 'common/read_write_lock'
-require_relative 'common/read_write_lock_hash'
+require_relative 'common/rwlock'
+require_relative 'common/rwlock_hash'
 
 class StatusChecker < BaseServer
 

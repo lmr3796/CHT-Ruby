@@ -1,4 +1,4 @@
-require_relative 'common/read_write_lock_hash'
+require_relative 'common/rwlock_hash'
 
 module MessageService
   class InvalidMessageError < StandardError; end

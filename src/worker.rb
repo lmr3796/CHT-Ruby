@@ -6,7 +6,7 @@ require 'securerandom'
 
 require_relative 'base_server'
 require_relative 'job.rb'
-require_relative 'common/read_write_lock'
+require_relative 'common/rwlock'
 
 class TaskResultManager
   def initialize()

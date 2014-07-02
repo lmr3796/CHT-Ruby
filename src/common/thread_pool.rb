@@ -1,6 +1,6 @@
 require 'thread'
 require 'securerandom'
-require_relative 'read_write_lock_hash'
+require_relative 'rwlock_hash'
 
 class ThreadPool
 
