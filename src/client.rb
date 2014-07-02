@@ -45,7 +45,6 @@ class Client
   end
 
   def run_job(job_id, result_pos)
-    @result[result_pos][:deadline] = Time.now
     task_queue = @submitted_jobs[job_id]
     thread_id_list = []
     until task_queue.empty? do
