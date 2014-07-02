@@ -32,7 +32,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     return if @results[m[:job_id]][m[:task_id]] != nil  # Outdated result message
     job_id = m[:job_id]
     task_id = m[:task_id]
-    worker_server = DRbObject.new_with_uri @dispatcher.worker_uri m[:worker]
+    worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(m[:worker]))
     results = worker_server.get_results(@uuid)
     add_results(results, job_id)
     redo_task(task_id, job_id) if @results[job_id][task_id] == nil

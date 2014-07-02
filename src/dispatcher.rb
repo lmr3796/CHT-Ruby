@@ -221,7 +221,7 @@ class Dispatcher < BaseServer
     raise NotImplementedError
   end
   def worker_uri(worker)
-    return @status_checker.worker_uri worker
+    return @status_checker.worker_uri(worker)
   end
 
   def log_job_worker_queue
