@@ -54,5 +54,12 @@ worker.status_checker = DRbObject.new_with_uri status_checker_druby_uri
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service worker_druby_uri, worker
 $stderr.puts "Worker #{options[:name]} running on #{worker_druby_uri}..."
-worker.register # Must registier only after service started
+begin
+  worker.register # Must registier only after service started
+rescue DRb::DRbConnError
+  logger.error "Error reaching the management system, waiting for retry"
+  sleep 3
+  retry
+end
+worker.start
 DRb.thread.join
