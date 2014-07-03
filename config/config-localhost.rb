@@ -18,9 +18,9 @@ module CHT_Configuration
       DECISION_MAKER_DEFAULT_PORT  = 10003
     end
 
-    DISPATCHER      = {:address => 'linux11.csie.org', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
-    STATUS_CHECKER  = {:address => 'linux11.csie.org', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
-    DECISION_MAKER  = {:address => 'linux11.csie.org', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
+    DISPATCHER      = {:address => 'localhost', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
+    STATUS_CHECKER  = {:address => 'localhost', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
+    DECISION_MAKER  = {:address => 'localhost', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
 
     WORKERS = {
       #'linux8-1' => {:address => 'linux8.csie.org', :port => 20001},
