@@ -16,7 +16,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   # the only parameter.
 
   def on_worker_available(m)
-    task = @submitted_job[m[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
+    task = @submitted_job[m.content[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker = m[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     worker_server.submit_task(task, job_id, @uuid)
@@ -59,7 +59,7 @@ class Client
   end
 
   def wait_all()
-    @thread_id_list.each{|thread_id| wait(thread_id)}
+    raise NotImplementedError
   end
 
   def start(blocking=false)

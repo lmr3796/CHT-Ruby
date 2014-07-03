@@ -31,10 +31,6 @@ class TaskResultManager
     end
   end
 
-  def clear_result(job_id)  # This is different from delete_result while this keeps entry
-    @rwlock.with_write_lock{@task_result[job_id].clear}
-  end
-
   def delete_result(key={})
     key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
     @rwlock.with_write_lock do
@@ -71,6 +67,8 @@ class Worker < BaseServer
     @status = STATUS::AVAILABLE
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
+    @dispatcher = DRbObject.new_with_uri(arg[:dispatcher_uri])
+    @status_checker = DRbObject.new_with_uri(arg[:status_checker_uri])
   end
 
   def register()
@@ -125,6 +123,8 @@ class Worker < BaseServer
     log_running_time(job_uuid, result.run_time)
     @logger.info "Finished task of job #{job_uuid} in #{result.run_time} seconds"
     @result_manager.add_result(client_id, TaskResult.new(task.id, job_uuid, result))
+    @dispatcher.on_task_done(@name, task_id, job_id, client_id)
+    @status_checker.on_task_done(@name, task_id, job_id, client_id)
   end
 
   def run_cmd(command, *args)
