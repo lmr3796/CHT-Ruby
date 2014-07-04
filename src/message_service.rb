@@ -158,16 +158,24 @@ module MessageService
     def poll_message
       loop do
         # Timeout must be implemented on server side since drb won't release wait on error...
-        msg = @msg_server.get_message @uuid
-        next if msg.empty?
-        msg.each {|m| @msg_queue << m}
+        msg_list = @msg_server.get_message(@uuid)
+        begin
+          msg_list.is_a? Array or raise InvalidMessageError, 'Should obtain a list of Message from server'
+          next if msg_list.empty?
+          msg_list.each {|m| @msg_queue << m}
+        rescue InvalidMessageError
+          @logger.error "Invalid stuff obtained: #{msg_list}"
+          next
+        end
       end
     end
 
     def process_message(m)
       m.is_a? Message or raise InvalidMessageError
+      @logger.debug "Received #{m}"
       handler_name = "on_#{m.type.to_s}"
       @handler.respond_to?(handler_name) or raise NoMatchingHandlerError
+      @logger.debug "Send #{m} to #{handler_name}"
       @handler.send(handler_name, m)  # The ruby way to invoke method by its name string
       return
     end
@@ -175,7 +183,6 @@ module MessageService
     def process_message_queue
       loop do
         m = @msg_queue.pop
-        m.is_a? Message or raise InvalidMessageError
         begin
           process_message(m)
         rescue InvalidMessageError => e
@@ -183,9 +190,9 @@ module MessageService
         rescue NoMatchingHandlerError => e
           @handler.on_no_handler_found_error(m, e)
         rescue => e
-          @logger.error "Error processing message #{m}"
+          @logger.error "Error processing message #{m.inspect}"
           @logger.error e.message
-          @logger.error e.backtrace.join('\n')
+          @logger.error e.backtrace.join("\n")
         end
       end
     end

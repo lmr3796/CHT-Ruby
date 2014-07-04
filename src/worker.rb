@@ -107,7 +107,7 @@ class Worker < BaseServer
     valid_assignment?(assignment) or raise ArgumentError
     @job_assignment = assignment
     self.status = STATUS::OCCUPIED
-    @logger.debug "Assigned with #{assignment}"
+    @logger.debug "Assigned with job:#{assignment[0]}, client:#{assignment[1]}"
     return
   end
 

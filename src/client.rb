@@ -16,9 +16,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   # the only parameter.
 
   def on_worker_available(m)
-    @logger.debug "Worker #{m.content[:worker]} assigned" 
-    task = @submitted_job[m.content[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
-    worker = m[:worker]
+    @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}" 
+    job_id = m.content[:job_id]
+    worker = m.content[:worker]
+    task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     worker_server.submit_task(task, job_id, @uuid)
     @dispatcher.task_sent(job_id)
@@ -80,6 +81,9 @@ class Client
     @logger.info "Initialized message service."
     @msg_service.start
     @logger.info "Running message service."
+    @logger.info "Sending testing message."
+    test_msg = MessageService::Message.new(:chat, nil, "Test!, I'm #{@uuid}")
+    @dispatcher.push_message(@uuid, test_msg)
     submit_jobs(@jobs) unless @jobs.empty?
     return
   end
@@ -100,9 +104,10 @@ class Client
         :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
         :job => jobs[i]
       }
-      jobs[i].task.each{|t| @submitted_jobs[job_id][:task_queue] << t} # FIXME j undefined
+      jobs[i].task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
       @results[job_id] = [nil] * jobs[i].task.size
     end
+    @logger.info "Update local status of #{job_id_list}"
     return job_id_list
   end
 

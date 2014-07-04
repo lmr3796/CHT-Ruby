@@ -244,7 +244,7 @@ end
 module Dispatcher::DispatcherWorkerInterface
   # Worker APIs
   def on_task_done(worker, task_id, job_id, client_id)
-    push_message(client_id, MessageService::Message.new(:task_result_available, :job_id=>job_id, :task_id=>task_id))
+    @logger.fatal "#{__FILE__}: #{__LINE__}"
     return
   end
 
@@ -257,7 +257,9 @@ module Dispatcher::DispatcherWorkerInterface
       worker_available_msg = MessageService::Message.new(:worker_available,
                                                          :worker=>worker,
                                                          :job_id=>next_job_assigned)
-      push_message(@client_job_list.get_client_by_job(next_job_assigned),worker_available_msg)
+      client = @client_job_list.get_client_by_job(next_job_assigned)
+      @logger.debug "Send message to tell client #{client} worker #{worker} is ready"
+      push_message(client, worker_available_msg)
     end
     return
   end
@@ -290,7 +292,6 @@ module Dispatcher::MessageServiceServerDelegator include MessageService::Server
   end
 
   def get_message(client_id, timeout_limit=5)
-    @msg_service_server.get_message(client_id, timeout_limit)
-    return
+    return @msg_service_server.get_message(client_id, timeout_limit)
   end
 end
