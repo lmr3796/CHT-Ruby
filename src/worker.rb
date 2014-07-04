@@ -70,17 +70,20 @@ class Worker < BaseServer
     @dispatcher = DRbObject.new_with_uri(arg[:dispatcher_uri])
     @status_checker = DRbObject.new_with_uri(arg[:status_checker_uri])
     @job_assignment = Atomic.new([nil,nil])
+    return
   end
 
   def register()
     @logger.info "Notifies status checker for coming"
     @status_checker.register_worker @name
+    return
   end
 
   def status=(s)
     raise ArgumentError if !STATUS::constants.include? s
     @logger.info "Worker status set to #{s}"
     @status = s
+    return s
   end
 
   def log_running_time(job_id, time)
@@ -88,11 +91,13 @@ class Worker < BaseServer
     @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
     @logger.info "Logs runtime to status_checker"
     @status_checker.log_running_time job_id, time
+    return
   end
 
   def release()
     # TODO: what if maliciously called?
     @status_checker.release_worker @name
+    return
   end
 
   def assign_job(assignment)
@@ -103,6 +108,7 @@ class Worker < BaseServer
     @job_assignment = assignment
     self.status = STATUS::OCCUPIED
     @logger.debug "Assigned with #{assignment}"
+    return
   end
 
   def submit_task(task, job_uuid, client_id)
@@ -112,6 +118,7 @@ class Worker < BaseServer
       @task_to_run = {:task => task, :job_uuid=>job_uuid, :client_id=>client_id}
     end
     Thread::main.run
+    return
   end
 
   def start
@@ -124,6 +131,7 @@ class Worker < BaseServer
         # TODO notifies dispatcher for task completion
       end
     end
+    return
   end
 
   def run_task(task, job_uuid, client_id)
@@ -136,6 +144,7 @@ class Worker < BaseServer
     @result_manager.add_result(client_id, TaskResult.new(task.id, job_uuid, result))
     @dispatcher.on_task_done(@name, task_id, job_id, client_id)
     @status_checker.on_task_done(@name, task_id, job_id, client_id)
+    return
   end
 
   def run_cmd(command, *args)

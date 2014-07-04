@@ -10,21 +10,22 @@ module MessageService
       self.type = type
       self.content = content
       self.message = message
+      return
     end
 
     def type=(t)
       t.is_a? Symbol or raise ArgumentError
-      @type = t
+      return @type = t
     end
 
     def content=(c)
       c == nil || c.is_a?(Hash) or raise ArgumentError
-      @content = c
+      return @content = c
     end
 
     def message=(m)
       m.is_a? String or raise ArgumentError
-      @message = m
+      return @message = m
     end
   end
 
@@ -58,27 +59,32 @@ module MessageService
     include Server
     def initialize
       @client_message_queue = ReadWriteLockHash.new
+      return
     end
 
     def get_clients()
-      @client_message_queue.keys
+      return @client_message_queue.keys
     end
 
     def register(client_id)
       @client_message_queue[client_id] = Queue.new
+      return
     end
 
     def unregister(client_id)
       @client_message_queue[client.uuid].clear
       @client_message_queue.delete client.uuid
+      return
     end
 
     def push_message(client_id, message)
       @client_message_queue[client_id] << message
+      return
     end
 
     def broadcast_message(message)
       @client_message_queue.values.each{|q| q << message}
+      return
     end
 
     def get_message(client_id, timeout_limit=5)
@@ -101,10 +107,12 @@ module MessageService
     module MessageHandler # Message Handler Interface to expose
       def on_chat(m)  # For testing :P
         @logger.debug "on_chat: Received \"#{m.message}\""
+        return
       end
 
       def on_no_handler_found_error(m, e)
         @logger.warn "No handler for message #{m}"
+        return
       end
     end
 
@@ -126,21 +134,25 @@ module MessageService
         Thread.stop # Don't run immediately, wait for client to start
         process_message_queue
       end
+      return
     end
 
     def << (m)
       @msg_queue << m
+      return self
     end
 
     def start
       @notification_thr.run
       @process_thr.run
       # TODO test if msg service connected
+      return
     end
 
     def stop
       @notification_thr.kill
       @process_thr.kill
+      return
     end
 
     def poll_message
@@ -157,6 +169,7 @@ module MessageService
       handler_name = "on_#{m.type.to_s}"
       @handler.respond_to?(handler_name) or raise NoMatchingHandlerError
       @handler.send(handler_name, m)  # The ruby way to invoke method by its name string
+      return
     end
 
     def process_message_queue

@@ -12,12 +12,15 @@ class StatusChecker < BaseServer
 
   def job_running_time()
     @lock.with_read_lock{return Hash[@job_running_time]}
+    return
   end
   def worker_avg_running_time()
     @lock.with_read_lock{return Hash[@worker_avg_running_time]}
+    return
   end
   def worker_status
     @lock.with_read_lock{return Hash[@worker_status_table]}
+    return
   end
   def worker_uri(worker)
     return @worker_table[worker].instance_variable_get("@uri")
@@ -32,7 +35,6 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
-    return  #FIXME remove this!!!!!!!!!!
     if arg[:update_period]
       Thread.new do
         EventMachine.run do
@@ -50,6 +52,7 @@ class StatusChecker < BaseServer
         end
       end
     end
+    return
   end
 
   def collect_status(workers=@worker_table.keys)
@@ -88,12 +91,14 @@ class StatusChecker < BaseServer
       @logger.info "Job #{job_id} registered for recording"
       @job_running_time[job_id] = []
     end
+    return
   end
   def delete_job(job_id)
     @lock.with_write_lock do
       @logger.info "Job #{job_id} removed from recording"
       @job_running_time.delete job_id
     end
+    return
   end
 
   def log_running_time(job_id, time)
@@ -119,6 +124,7 @@ module StatusChecker::WorkerInterface
       @logger.debug e.backtrace.join("\n")
     end
     @dispatcher.on_worker_available(worker)
+    return
   end
 
   def release_worker(worker, notify=true)
@@ -127,6 +133,7 @@ module StatusChecker::WorkerInterface
       @logger.info "Released worker: #{worker}"
     end
     @dispatcher.on_worker_available(worker) if notify
+    return
   end
  
   def occupy_worker(worker)
@@ -134,6 +141,7 @@ module StatusChecker::WorkerInterface
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
       @logger.info "Occupied worker: #{worker}"
     end
+    return
   end
 
   def worker_running(worker)
@@ -141,9 +149,11 @@ module StatusChecker::WorkerInterface
       @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
       @logger.info "Mark running worker: #{worker}"
     end
+    return
   end
 
   def on_task_done(worker, task_id, job_id, client_id)
     release_worker(worker)
+    return
   end
 end

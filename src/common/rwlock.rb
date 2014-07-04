@@ -5,6 +5,7 @@ class ReadWriteLock
     @mutex = Mutex.new
     @rwlock = Mutex.new
     @read_count = 0
+    return
   end
 
   def with_read_lock()
@@ -26,6 +27,7 @@ class ReadWriteLock
       @rwlock.lock if @read_count == 0
       @read_count += 1
     end
+    return
   end
 
   def release_read_lock()
@@ -34,14 +36,16 @@ class ReadWriteLock
       @read_count -= 1
       @rwlock.unlock if @read_count == 0
     end
+    return
   end
 
   def require_write_lock()
-    @rwlock.lock
+    return @rwlock.lock
   end
 
   def release_write_lock()
     @rwlock.unlock
+    return
   end
 
   private :require_read_lock, :require_write_lock,

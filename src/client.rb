@@ -28,7 +28,8 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     #TODO some notification to dispatcher????
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
-    #TODO
+    #TODO some recovery??
+    return
   end
 
   def on_task_result_available(m)
@@ -39,6 +40,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     results = worker_server.get_results(@uuid)
     add_results(results, job_id)
     redo_task(task_id, job_id) if @results[job_id][task_id] == nil
+    return
   end
 end
 
@@ -54,16 +56,19 @@ class Client
     @jobs = jobs
     @results = {}
     @logger = logger
+    return
   end
 
   def stop()
     @msg_service.stop
     @dispatcher.unregister_client(self)
     @logger.info "Unregistered from the system"
+    return
   end
 
   def wait_all()
     loop{}
+    return
   end
 
   def start()
@@ -116,10 +121,12 @@ class Client
         @results[job_id][r.task_id] = r
       end
     end # assign only on no result
+    return
   end
 
   def redo_task(task_id, job_id)
     @submitted_job[job_id][:task_queue] << @submitted_job[job_id][:job].task[task_id]
     @dispatcher.redo_task(job_id)
+    return
   end
 end
