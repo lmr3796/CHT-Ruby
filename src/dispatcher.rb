@@ -1,4 +1,4 @@
-require 'observer'
+require 'publisher'
 require 'thread'
 require 'timeout'
 require 'securerandom'
@@ -21,27 +21,26 @@ class Dispatcher < BaseServer
 end
 
 class Dispatcher::JobList < ReadWriteLockHash
-  attr_reader :deletion_observerable, :submission_observerable
+  extend Publisher
+  can_fire :submission, :deletion
   def initialize(logger)
     super()
     @logger = logger
-    @deletion = Observable.new
-    @submission = Observable.new
   end
 
   def []=(job_id, job)
     super
-    submission.notify_observers([job_id])
+    fire(:submission, [job_id])
   end
 
   def delete(job_id)
     super  # The job_id must be passed if super is not the first statement....
-    deletion.notify_observers([job_id])
+    fire(:deletion, [job_id])
   end
 
   def merge!(jobs)
     super
-    submission.notify_observers(jobs)
+    fire(:submission, jobs)
     return self
   end
 end
@@ -64,11 +63,10 @@ class Dispatcher::ScheduleManager
     @decision_maker = arg[:decision_maker]
     @status_checker = arg[:status_checker]
     @on_schedule_callback = arg[:on_schedule_callback]
-    @on_schedule_callback = [@on_schedule_callback] if !@on_schedule_callback.is_a? Array
 
     @job_list = job_list
-    @job_list.submission.add_observer(self, :on_job_submitted)
-    @job_list.deletion.add_observer(self, :on_job_deleted)
+    @job_list.when(:submission, self, :on_job_submitted)
+    @job_list.when(:deletion, self, :on_job_deleted)
   end
 
   def schedule_job()
@@ -77,7 +75,7 @@ class Dispatcher::ScheduleManager
       job_running_time = @status_checker.job_running_time
       worker_avg_running_time = @status_checker.worker_avg_running_time
 
-      cloned_job_list = Hash.new.merge(Marshal.load(Marshal.dump(@job_list)))
+      cloned_job_list = Hash.new.merge(@job_list)
       workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN}
       # Schedule result:  {job_id => [worker1, worker2...]}
       @job_worker_table = @decision_maker.schedule_job(
@@ -95,17 +93,17 @@ class Dispatcher::ScheduleManager
         end
       end
     end
-    @on_schedule_callback.each{|c|c.call}
+    @on_schedule_callback.call if @on_schedule_callback.respond_to? :call
     @logger.info 'Updated schedule successfully'
   end
 
   # Observer callbacks
-  def on_job_submitted(job_id_list)
+  def on_job_submitted(_)
     schedule_job
   end
 
-  def on_job_deleted(job_id)
-    @worker_job_table.delete_if{|w,j| j == job_id}
+  def on_job_deleted(change_list)
+    @worker_job_table.delete_if{|w,j| change_list.include? job_id}
     schedule_job
   end
 
@@ -122,21 +120,19 @@ class Dispatcher < BaseServer
     @decision_maker = arg[:decision_maker]
     @msg_service_server = MessageService::BasicServer.new
 
+    @client_job_list = ClientJobList.new
+    @job_list = JobList.new @logger
+    @job_list.when(:submission, self, :on_job_submitted)
+    @job_list.when(:deletion, self, :on_job_deleted)
     @schedule_manager = ScheduleManager.new(@job_list,
                                             :status_checker => @status_checker,
                                             :decision_maker => @decision_maker,
-                                            :on_schedule_callback => method(:clear_job_worker_queue),
+                                            #:on_schedule_callback => method(:clear_job_worker_queue),
                                             :logger => @logger
                                            )
-    @client_job_list = ClientJobList.new
-
-    @job_list = JobList.new @logger
-    @job_list.submission.add_observer(self, :on_job_submitted)
-    @job_list.deletion.add_observer(self, :on_job_deleted)
   end
 
   def clear_job_worker_queue
-    @job_worker_queues.values.each{|q| q.clear}
     occupied_workers = @status_checker.worker_status.select{|_,s|s == Worker::STATUS::OCCUPIED}
     occupied_workers.each{|w,_|@status_checker.release_worker(w)}
   end
@@ -228,7 +224,7 @@ module Dispatcher::DispatcherWorkerInterface
     @resource_mutex.synchronize do
       next_job_assigned = @schedule_manager.worker_job_table[worker]
       @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
-      return unless @job_worker_queues[next_job_assigned]
+      return if next_job_assigned == nil
       push_message(@client_list.get_client_by_job(next_job_assigned), MessageService::Message.new(:worker_available))
     end
   end
