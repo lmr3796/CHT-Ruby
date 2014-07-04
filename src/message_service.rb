@@ -1,5 +1,6 @@
 require_relative 'common/rwlock_hash'
 
+#FIXME: message service sometime fails
 module MessageService
   class InvalidMessageError < StandardError; end
   class NoMatchingHandlerError < StandardError; end
@@ -104,7 +105,6 @@ module MessageService
   class Client
     attr_accessor :logger
 
-
     def initialize(uuid, msg_server, handler)
       uuid.is_a? String or raise ArgumentError
       handler.is_a? MessageHandler or raise ArgumentError
@@ -137,12 +137,9 @@ module MessageService
           retry
         end
       end
+      # Wait until they're sleeping, otherwise start might let them directly execute stop...
+      until @notification_thr.stop? && @process_thr.stop? do sleep 1 end
       return
-    end
-
-    def << (m)
-      @msg_queue << m
-      return self
     end
 
     def start
@@ -163,9 +160,13 @@ module MessageService
         # Timeout must be implemented on server side since drb won't release wait on error...
         msg_list = @msg_server.get_message(@uuid)
         begin
-          msg_list.is_a? Array or raise InvalidMessageError, 'Should obtain a list of Message from server'
+          msg_list.is_a? Array or raise 'Obtained stuff should be a list of Message from server'
+          @logger.debug "Retrieved #{msg_list.size} messages from server" if msg_list.size > 0
           next if msg_list.empty?
-          msg_list.each {|m| @msg_queue << m}
+          msg_list.each do |m|
+            @logger.debug "Push message #{m.inspect} to message queue"
+            @msg_queue << m
+          end
         rescue InvalidMessageError
           @logger.error "Invalid stuff obtained: #{msg_list}"
           next
