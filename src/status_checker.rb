@@ -86,17 +86,21 @@ class StatusChecker < BaseServer
     return
   end
 
-  def register_job(job_id)
+  def register_job(job_id_list)
     @lock.with_write_lock do
-      @logger.info "Job #{job_id} registered for recording"
-      @job_running_time[job_id] = []
+      job_id_list.each do |job_id|
+        @job_running_time[job_id] = []
+        @logger.info "Job #{job_id} registered for recording"
+      end
     end
     return
   end
-  def delete_job(job_id)
+  def delete_job(job_id_list)
     @lock.with_write_lock do
-      @logger.info "Job #{job_id} removed from recording"
-      @job_running_time.delete job_id
+      job_id_list.each do |job_id|
+        @job_running_time.delete job_id
+        @logger.info "Job #{job_id} removed from recording"
+      end
     end
     return
   end

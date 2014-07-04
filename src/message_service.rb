@@ -104,17 +104,6 @@ module MessageService
   class Client
     attr_accessor :logger
 
-    module MessageHandler # Message Handler Interface to expose
-      def on_chat(m)  # For testing :P
-        @logger.debug "on_chat: Received \"#{m.message}\""
-        return
-      end
-
-      def on_no_handler_found_error(m, e)
-        @logger.warn "No handler for message #{m}"
-        return
-      end
-    end
 
     def initialize(uuid, msg_server, handler)
       uuid.is_a? String or raise ArgumentError
@@ -212,5 +201,17 @@ module MessageService
     end
 
     private :process_message
+  end
+
+  module Client::MessageHandler # Message Handler Interface to expose
+    def on_chat(m)  # For testing :P
+      @logger.debug "on_chat: Received \"#{m.message}\""
+      return
+    end
+
+    def on_no_handler_found_error(m, e)
+      @logger.warn "No handler for message #{m}"
+      return
+    end
   end
 end

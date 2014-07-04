@@ -19,6 +19,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}" 
     job_id = m.content[:job_id]
     worker = m.content[:worker]
+    @logger.debug @submitted_jobs
     task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     worker_server.submit_task(task, job_id, @uuid)
@@ -95,18 +96,30 @@ class Client
     jobs.reject{|x|x.is_a? Job}.empty? or raise ArgumentError, 'Parameters should be a list of jobs or a single job'
 
     @logger.info "Submitting #{jobs.size} job(s)"
-    job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
-    (@logger.error "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
-    @logger.info "Job submitted: id mapping: #{job_id_list}"
-    # Build a task queue for each job, indexed with job_id returned from dispatcher
-    job_id_list.each_with_index do |job_id, i|
+
+    # This is a 2-pass negotiation. The reason to have it is because the local
+    # information might not be ready before a worker available message comes.
+    @logger.info "Generating job uuids"
+    job_id_list = @dispatcher.generate_job_id(jobs, @uuid)
+    raise ArgumentError, "ID amount mismatch" if job_id_list.size != jobs.size
+    @logger.info "job uuids: #{job_id_list}"
+
+    jobs = Hash[job_id_list.zip(jobs)]
+    job_id_list.each do |job_id|  # Build a task queue for each job, indexed with job_id returned from dispatcher
       @submitted_jobs[job_id] = {
         :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
-        :job => jobs[i]
+        :job => jobs[job_id]
       }
-      jobs[i].task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
-      @results[job_id] = [nil] * jobs[i].task.size
+      jobs[job_id].task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
+      @results[job_id] = [nil] * jobs[job_id].task.size
     end
+
+    job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
+    @logger.debug job_id_list
+    @logger.debug jobs
+    raise 'Submissiion failure' if job_id_list != jobs.keys
+    # TODO submission failure??
+    @logger.info "Job submitted: id mapping: #{job_id_list}"
     @logger.info "Update local status of #{job_id_list}"
     return job_id_list
   end

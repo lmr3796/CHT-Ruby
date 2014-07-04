@@ -48,7 +48,7 @@ class Dispatcher::JobList < ReadWriteLockHash
 
   def merge!(jobs)
     super
-    fire(:submission, jobs)
+    fire(:submission, jobs.keys)
     return self
   end
 end
@@ -104,8 +104,9 @@ class Dispatcher::ScheduleManager
   end
 
   # Observer callbacks
-  def on_job_submitted(_)
+  def on_job_submitted(change_list)
     schedule_job
+    @status_checker.register_job(change_list)
     return
   end
 
@@ -209,8 +210,11 @@ module Dispatcher::DispatcherClientInterface
     return
   end
 
-  def submit_jobs(job_list, client_id)
-    job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
+  def generate_job_id(job_list, client_id)
+    return job_list.map{|job| SecureRandom.uuid}
+  end
+
+  def submit_jobs(job_id_table, client_id)
     @logger.info "Job submitted: #{job_id_table.keys}"
     @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
     @job_list.merge! job_id_table

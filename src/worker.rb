@@ -8,41 +8,14 @@ require_relative 'base_server'
 require_relative 'job.rb'
 require_relative 'common/rwlock'
 
-class TaskResultManager
-  def initialize()
-    @rwlock = ReadWriteLock.new
-    # Following field won't be written concurrently
-    @task_result = Hash.new {|h,k| h[k] = []}
-    @task_result_by_client = Hash.new # Contains job_id
-  end
+class Worker < BaseServer; end
 
-  def get_result_by_client(client_id)
-    @rwlock.with_read_lock do
-      @task_result_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
-      return @task_result.select{|k,v|@task_result_by_client[client_id].include? k}
-    end
-  end
-
-  def add_result(client_id, result)
-    result.is_a? TaskResult or raise ArgumentError
-    @rwlock.with_write_lock do
-      @task_result[result.job_id] << result
-      @task_result_by_client[client_id] << job_id unless @task_result_by_client[client_id].include? job_id
-    end
-  end
-
-  def delete_result(key={})
-    key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
-    @rwlock.with_write_lock do
-      if key.has_key? :client_id and key.has_key? :job_id_list
-        @task_result.delete_if{|k,v| (@task_result_by_client[:client_id] & key[:job_id_list]).include? k}
-      elsif key.has_key? :client_id
-        @task_result.delete_if{|k,v| key[:client_id].map{|c|task_result_by_client[c]}.flatten.include? k}
-      else
-        raise NotImplementedError
-      end
-    end
-  end
+module Worker::STATUS
+  DOWN       = :DOWN
+  UNKNOWN    = :UNKNOWN
+  OCCUPIED   = :OCCUPIED    # Assigned to a job but not running a task
+  AVAILABLE  = :AVAILABLE   # Idle, not assigned to a job
+  BUSY       = :BUSY        # Running a task
 end
 
 class Worker < BaseServer
@@ -50,14 +23,6 @@ class Worker < BaseServer
   attr_writer :status_checker
 
   LEARNING_RATE = 0.2         # Rate of updating avg exec time
-
-  module STATUS
-    DOWN       = :DOWN
-    UNKNOWN    = :UNKNOWN
-    OCCUPIED   = :OCCUPIED    # Assigned to a job but not running a task
-    AVAILABLE  = :AVAILABLE   # Idle, not assigned to a job
-    BUSY       = :BUSY        # Running a task
-  end
 
   def initialize(name, arg={})
     super arg[:logger]
@@ -134,21 +99,22 @@ class Worker < BaseServer
     return
   end
 
-  def run_task(task, job_uuid, client_id)
+  def run_task(task, job_id, client_id)
     task.is_a? Task or raise ArgumentError
     @status_checker.worker_running @name
-    @logger.info "Running task of job #{job_uuid}"
-    result = run_cmd(task.cmd, *task.args)
-    log_running_time(job_uuid, result.run_time)
-    @logger.info "Finished task of job #{job_uuid} in #{result.run_time} seconds"
-    @result_manager.add_result(client_id, TaskResult.new(task.id, job_uuid, result))
+    @logger.info "Running task of job #{job_id}"
+    result = TaskResult.new(task.id, job_id, run_cmd(task.cmd, *task.args))
+    @logger.debug result.inspect
+    log_running_time(job_id, result.run_time)
+    @logger.info "Finished task of job #{job_id} in #{result.run_time} seconds"
+    @result_manager.add_result(client_id, TaskResult.new(task.id, job_id, result))
     @dispatcher.on_task_done(@name, task_id, job_id, client_id)
     @status_checker.on_task_done(@name, task_id, job_id, client_id)
     return
   end
 
   def run_cmd(command, *args)
-    @logger.debug "Running `#{command}#{args.join(' ')}`"
+    @logger.debug "Running `#{command} #{args.join(' ')}`"
     start = Time.now
     # Should use wait_thr instead of $?; $? not working when using DRb
     stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
@@ -171,3 +137,39 @@ class Worker < BaseServer
 
 end
 
+class Worker::TaskResultManager
+  def initialize()
+    @rwlock = ReadWriteLock.new
+    # Following field won't be written concurrently
+    @task_result = Hash.new {|h,k| h[k] = []}
+    @task_result_by_client = Hash.new # Contains job_id
+  end
+
+  def get_result_by_client(client_id)
+    @rwlock.with_read_lock do
+      @task_result_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
+      return @task_result.select{|k,v|@task_result_by_client[client_id].include? k}
+    end
+  end
+
+  def add_result(client_id, result)
+    result.is_a? TaskResult or raise ArgumentError
+    @rwlock.with_write_lock do
+      @task_result[result.job_id] << result
+      @task_result_by_client[client_id] << job_id unless @task_result_by_client[client_id].include? job_id
+    end
+  end
+
+  def delete_result(key={})
+    key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
+    @rwlock.with_write_lock do
+      if key.has_key? :client_id and key.has_key? :job_id_list
+        @task_result.delete_if{|k,v| (@task_result_by_client[:client_id] & key[:job_id_list]).include? k}
+      elsif key.has_key? :client_id
+        @task_result.delete_if{|k,v| key[:client_id].map{|c|task_result_by_client[c]}.flatten.include? k}
+      else
+        raise NotImplementedError
+      end
+    end
+  end
+end
