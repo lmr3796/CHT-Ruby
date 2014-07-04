@@ -151,6 +151,7 @@ class Dispatcher < BaseServer
   def assign_worker_to_job(worker, job_id)
     @logger.debug "Worker #{worker} will be assigned to #{job_id}"
     job_assignment = [job_id, @client_job_list.get_client_by_job(job_id)]
+    job_assignment = Worker::JobAssignment.new(job_id, @client_job_list.get_client_by_job(job_id))
     DRbObject.new_with_uri(worker_uri(worker)).assign_job(job_assignment) # May have to clean this ??
     return
   end

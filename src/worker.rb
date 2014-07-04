@@ -10,6 +10,8 @@ require_relative 'common/rwlock'
 
 class Worker < BaseServer; end
 
+Worker::JobAssignment = Struct.new(:job_id, :client_id, :task)
+
 module Worker::STATUS
   DOWN       = :DOWN
   UNKNOWN    = :UNKNOWN
@@ -34,7 +36,7 @@ class Worker < BaseServer
     @result_manager = TaskResultManager.new
     @dispatcher = arg[:dispatcher]
     @status_checker = arg[:status_checker]
-    @job_assignment = Atomic.new([nil,nil])
+    @assignment = Atomic.new(JobAssignment.new)
     return
   end
 
@@ -59,30 +61,32 @@ class Worker < BaseServer
     return
   end
 
-  def release()
-    # TODO: what if maliciously called?
+  # Should only be invoked by client
+  def release(client_id)
+    if @assignment.value.client_id != client_id
+      @logger.error("Invalid caller client: #{client_id}")
+      return false 
+    end
     @status_checker.release_worker @name
-    return
+    return true
   end
 
   def assign_job(assignment)
-    def valid_assignment?(assignment)
-      return assignment.is_a?(Array) && assignment.size == 2
-    end
-    valid_assignment?(assignment) or raise ArgumentError
-    @job_assignment = assignment
+    assignment.is_a? JobAssignment or raise ArgumentError
+    @assignment.update{|_| assignment} 
     self.status = STATUS::OCCUPIED
-    @logger.debug "Assigned with job:#{assignment[0]}, client:#{assignment[1]}"
+    @logger.debug "Assigned with job:#{assignment.job_id}, client:#{assignment.client_id}"
     return
   end
 
-  def submit_task(task, job_uuid, client_id)
+  def submit_task(task, client_id)
     task.is_a? Task or raise ArgumentError
-    # TODO verify job_uuid && client_id
-    @lock.synchronize do  # Worker is dedicated
-      @task_to_run = {:task => task, :job_uuid=>job_uuid, :client_id=>client_id}
+    @lock.synchronize do
+      @assignment.value.job_id == task.job_id or raise 'Job ID mismatch'
+      @assignment.value.client_id == client_id or raise 'Client ID mismatch'
+      @assignment.update{|v| v.task = task; v}
+      Thread::main.run
     end
-    Thread::main.run
     return
   end
 
@@ -90,30 +94,26 @@ class Worker < BaseServer
     loop do
       Thread.stop if @task_to_run == nil
       $stderr.puts "Awake"
+      task, client_id = [@assignment.value.task, @assignment.value.client_id]
       @lock.synchronize do  # Worker is dedicated
-        run_task(@task_to_run[:task], @task_to_run[:client_id])
-        @task_to_run = nil
-        # TODO notifies dispatcher for task completion
+        result = run_task(task)
+        @status = STATUS::AVAILABLE
+        @result_manager.add_result(client_id, result)
       end
+      # TODO: Convert this 2 calls into message?
+      @dispatcher.on_task_done(@name, task.id, task.job_id, client_id)
+      @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
     end
-    return
   end
 
-  def run_task(task, client_id)
-    task.is_a? Task or raise ArgumentError
-    @status_checker.worker_running @name
+  def run_task(task) task.is_a? Task or raise 'Invalid task to run'
+    @status_checker.worker_running(@name)
     @logger.info "Running task of job #{task.job_id}"
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
     @logger.info "Finished task of job #{task.job_id} in #{result.run_time} seconds"
-    @result_manager.add_result(client_id, result)
-    @logger.warn "#{__FILE__}: #{__LINE__} #{@dispatcher.inspect}"
-    @logger.warn "#{__FILE__}: #{__LINE__} #{@dispatcher.alive}"
-    @logger.warn "#{__FILE__}: #{__LINE__} #{@status_checker.alive}"
-    @dispatcher.on_task_done(@name, task.id, task.job_id, client_id)
-    @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
-    return
+    return result
   end
 
   def run_cmd(command, *args)

@@ -19,16 +19,16 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}" 
     job_id = m.content[:job_id]
     worker = m.content[:worker]
-    @logger.debug @submitted_jobs
-    task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
-    worker_server.submit_task(task, job_id, @uuid)
+    task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
+
+    worker_server.submit_task(task, @uuid)
     @dispatcher.task_sent(job_id)
     @logger.debug "#{job_id} popped a task to worker #{worker}"
   rescue ThreadError # On empty task Queue
+    #FIXME this shouldn't happen
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
-    @status_checker.release_worker(worker)
-    #TODO some notification to dispatcher????
+    worker_server.release(@uuid)  # It takes client id for authentication
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
     #TODO some recovery??
