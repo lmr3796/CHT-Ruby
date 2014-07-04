@@ -12,11 +12,12 @@ def get_client()
 end
 def get_job(deadline=Time.now+300)
   j = Job.new
-  3.times { j.add_task Task.new('sleep',['10'])}
+  3.times { j.add_task Task.new('sleep',['5'])}
   j.deadline = deadline
   return j
 end
 c = get_client
+c.register
 c.start
 c.submit_jobs([get_job, get_job])
 c.wait_all

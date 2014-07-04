@@ -107,7 +107,7 @@ class Worker < BaseServer
     @logger.debug result.inspect
     log_running_time(job_id, result.run_time)
     @logger.info "Finished task of job #{job_id} in #{result.run_time} seconds"
-    @result_manager.add_result(client_id, TaskResult.new(task.id, job_id, result))
+    @result_manager.add_result(client_id, result)
     @dispatcher.on_task_done(@name, task_id, job_id, client_id)
     @status_checker.on_task_done(@name, task_id, job_id, client_id)
     return
@@ -156,7 +156,8 @@ class Worker::TaskResultManager
     result.is_a? TaskResult or raise ArgumentError
     @rwlock.with_write_lock do
       @task_result[result.job_id] << result
-      @task_result_by_client[client_id] << job_id unless @task_result_by_client[client_id].include? job_id
+      @task_result_by_client[client_id].include? result.job_id or
+        @task_result_by_client[client_id] << result.job_id
     end
   end
 

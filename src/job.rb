@@ -66,16 +66,10 @@ class Task
   end
 end
 
+TaskResult = Struct.new(:task_id, :job_id, :status, :run_time, :stdout, :stderr)
 class TaskResult
-  attr_accessor :status, :stdout, :stderr, :run_time
-
   def initialize(task_id, job_id, arg={})
-    @task_id = task_id
-    @job_id = job_id
-    @status = arg[:status]
-    @stdout = arg[:stdout]
-    @stderr = arg[:stderr]
-    @run_time = arg[:run_time]
+    super(task_id, job_id, arg[:status], arg[:run_time], arg[:stdout], arg[:stderr])
     return
   end
 end
