@@ -128,11 +128,25 @@ module MessageService
       # Producer && consumer
       @notification_thr = Thread.new do
         Thread.stop # Don't run immediately, wait for client to start
-        poll_message
+        begin
+          poll_message
+        rescue => e
+          @logger.fatal "Error on polling message"
+          @logger.fatal e.message
+          @logger.fatal e.backtrace.join("\n")
+          retry
+        end
       end
       @process_thr = Thread.new do
         Thread.stop # Don't run immediately, wait for client to start
-        process_message_queue
+        begin
+          process_message_queue
+        rescue => e
+          @logger.fatal "Error on processing message queue"
+          @logger.fatal e.message
+          @logger.fatal e.backtrace.join("\n")
+          retry
+        end
       end
       return
     end
