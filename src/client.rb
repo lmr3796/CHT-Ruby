@@ -27,6 +27,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.debug "#{job_id} popped a task to worker #{worker}"
   rescue ThreadError # On empty task Queue
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
+    @status_checker.release_worker(worker)
     #TODO some notification to dispatcher????
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
@@ -53,6 +54,7 @@ class Client
 
   def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
     DRb.start_service
+    @rwlock = ReadWriteLock.new
     @submitted_jobs = ReadWriteLockHash.new
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
@@ -73,18 +75,21 @@ class Client
     return
   end
 
-  def start()
-    @rwlock = ReadWriteLock.new
+  def register
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
     @msg_service = MessageService::Client.new(@uuid, @dispatcher, self)
     @msg_service.logger = @logger
     @logger.info "Initialized message service."
+  end
+
+  def start()
     @msg_service.start
     @logger.info "Running message service."
     @logger.info "Sending testing message."
     test_msg = MessageService::Message.new(:chat, nil, "Test!, I'm #{@uuid}")
     @dispatcher.push_message(@uuid, test_msg)
+    @logger.info "Test message sent."
     submit_jobs(@jobs) unless @jobs.empty?
     return
   end
@@ -110,13 +115,14 @@ class Client
         :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
         :job => jobs[job_id]
       }
-      jobs[job_id].task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
+      jobs[job_id].task.each do |t|
+        t.job_id = job_id
+        @submitted_jobs[job_id][:task_queue] << t
+      end
       @results[job_id] = [nil] * jobs[job_id].task.size
     end
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
-    @logger.debug job_id_list
-    @logger.debug jobs
     raise 'Submissiion failure' if job_id_list != jobs.keys
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"

@@ -1,6 +1,5 @@
 require_relative 'common/rwlock_hash'
 
-#FIXME: message service sometime fails
 module MessageService
   class InvalidMessageError < StandardError; end
   class NoMatchingHandlerError < StandardError; end

@@ -31,12 +31,17 @@ OptionParser.new do |opts|
     options[:status_checker_address] = addr
   end
 
+  # Specify the status checker address
+  opts.on('-d dispatcher_address', '--dispatcher_address dispatcher_address', 'Specify address of dispatcher') do |addr|
+    options[:dispatcher_address] = addr
+  end
 
 end.parse!
 
 options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
 options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
 options[:status_checker_address] = "druby://#{options[:status_checker_address]}" if options[:status_checker_address]
+options[:dispatcher_address] = "druby://#{options[:dispatcher_address]}" if options[:dispatcher_address]
 
 
 if !ARGV.empty?
@@ -48,9 +53,15 @@ end
 # Initiate and run the worker as a DRb object
 logger = Logger.new(STDERR)
 logger.level = CHT_Configuration::LOGGER_LEVEL
-worker = Worker.new options[:name], :logger=>logger
 status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
-worker.status_checker = DRbObject.new_with_uri status_checker_druby_uri
+status_checker = DRbObject.new_with_uri status_checker_druby_uri
+dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
+dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
+
+worker = Worker.new(options[:name],
+                    :logger=>logger,
+                    :status_checker=>status_checker,
+                    :dispatcher=>dispatcher)
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service worker_druby_uri, worker
 $stderr.puts "Worker #{options[:name]} running on #{worker_druby_uri}..."

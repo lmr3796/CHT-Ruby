@@ -56,7 +56,7 @@ class Job
 end
 
 class Task
-  attr_accessor :id
+  attr_accessor :id, :job_id
   attr_reader :cmd, :args
 
   def initialize(cmd, args=nil)

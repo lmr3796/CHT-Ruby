@@ -32,8 +32,8 @@ class Worker < BaseServer
     @status = STATUS::AVAILABLE
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
-    @dispatcher = DRbObject.new_with_uri(arg[:dispatcher_uri])
-    @status_checker = DRbObject.new_with_uri(arg[:status_checker_uri])
+    @dispatcher = arg[:dispatcher]
+    @status_checker = arg[:status_checker]
     @job_assignment = Atomic.new([nil,nil])
     return
   end
@@ -91,7 +91,7 @@ class Worker < BaseServer
       Thread.stop if @task_to_run == nil
       $stderr.puts "Awake"
       @lock.synchronize do  # Worker is dedicated
-        run_task(@task_to_run[:task], @task_to_run[:job_uuid], @task_to_run[:client_id])
+        run_task(@task_to_run[:task], @task_to_run[:client_id])
         @task_to_run = nil
         # TODO notifies dispatcher for task completion
       end
@@ -99,17 +99,20 @@ class Worker < BaseServer
     return
   end
 
-  def run_task(task, job_id, client_id)
+  def run_task(task, client_id)
     task.is_a? Task or raise ArgumentError
     @status_checker.worker_running @name
-    @logger.info "Running task of job #{job_id}"
-    result = TaskResult.new(task.id, job_id, run_cmd(task.cmd, *task.args))
+    @logger.info "Running task of job #{task.job_id}"
+    result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
-    log_running_time(job_id, result.run_time)
-    @logger.info "Finished task of job #{job_id} in #{result.run_time} seconds"
+    log_running_time(task.job_id, result.run_time)
+    @logger.info "Finished task of job #{task.job_id} in #{result.run_time} seconds"
     @result_manager.add_result(client_id, result)
-    @dispatcher.on_task_done(@name, task_id, job_id, client_id)
-    @status_checker.on_task_done(@name, task_id, job_id, client_id)
+    @logger.warn "#{__FILE__}: #{__LINE__} #{@dispatcher.inspect}"
+    @logger.warn "#{__FILE__}: #{__LINE__} #{@dispatcher.alive}"
+    @logger.warn "#{__FILE__}: #{__LINE__} #{@status_checker.alive}"
+    @dispatcher.on_task_done(@name, task.id, task.job_id, client_id)
+    @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
     return
   end
 
@@ -156,6 +159,7 @@ class Worker::TaskResultManager
     result.is_a? TaskResult or raise ArgumentError
     @rwlock.with_write_lock do
       @task_result[result.job_id] << result
+      @task_result_by_client[client_id] ||= []
       @task_result_by_client[client_id].include? result.job_id or
         @task_result_by_client[client_id] << result.job_id
     end
