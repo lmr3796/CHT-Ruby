@@ -3,6 +3,7 @@ require_relative 'common/rwlock_hash'
 module MessageService
   class InvalidMessageError < StandardError; end
   class NoMatchingHandlerError < StandardError; end
+  # TODO: maybe make it a struct???
   class Message
     attr_accessor :type, :content, :message
     def initialize(type, content=nil, message='')

@@ -32,6 +32,7 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
+    return  #FIXME remove this!!!!!!!!!!
     if arg[:update_period]
       Thread.new do
         EventMachine.run do
@@ -50,6 +51,7 @@ class StatusChecker < BaseServer
       end
     end
   end
+
   def collect_status(workers=@worker_table.keys)
     @logger.info "Collecting status"
     @lock.with_write_lock do
@@ -73,11 +75,12 @@ class StatusChecker < BaseServer
     workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
       begin
         @dispatcher.on_worker_available w
-      rescue => e
+      rescue DRb::DRbConnError => e
         @logger.error "Error reaching dispatcher"
-        @logger.debug e.backtrace
+        @logger.error e.backtrace.join("\n")
       end
     end
+    return
   end
 
   def register_job(job_id)

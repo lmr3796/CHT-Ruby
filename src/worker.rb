@@ -69,6 +69,7 @@ class Worker < BaseServer
     @result_manager = TaskResultManager.new
     @dispatcher = DRbObject.new_with_uri(arg[:dispatcher_uri])
     @status_checker = DRbObject.new_with_uri(arg[:status_checker_uri])
+    @job_assignment = Atomic.new([nil,nil])
   end
 
   def register()
@@ -92,6 +93,16 @@ class Worker < BaseServer
   def release()
     # TODO: what if maliciously called?
     @status_checker.release_worker @name
+  end
+
+  def assign_job(assignment)
+    def valid_assignment?(assignment)
+      return assignment.is_a?(Array) && assignment.size == 2
+    end
+    valid_assignment?(assignment) or raise ArgumentError
+    @job_assignment = assignment
+    self.status = STATUS::OCCUPIED
+    @logger.debug "Assigned with #{assignment}"
   end
 
   def submit_task(task, job_uuid, client_id)

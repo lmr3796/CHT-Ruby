@@ -16,6 +16,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   # the only parameter.
 
   def on_worker_available(m)
+    @logger.debug "Worker #{m.content[:worker]} assigned" 
     task = @submitted_job[m.content[:job_id]][:task_queue].pop(true) # Nonblocked, raise error if empty
     worker = m[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
@@ -25,6 +26,9 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   rescue ThreadError # On empty task Queue
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     #TODO some notification to dispatcher????
+  rescue DRb::DRbConnError
+    @logger.error "Error contacting worker #{worker}"
+    #TODO
   end
 
   def on_task_result_available(m)
@@ -59,10 +63,10 @@ class Client
   end
 
   def wait_all()
-    raise NotImplementedError
+    loop{}
   end
 
-  def start(blocking=false)
+  def start()
     @rwlock = ReadWriteLock.new
     @uuid = @dispatcher.register_client
     @logger.info "Registered client to the system, uuid=#{@uuid}"
@@ -71,18 +75,18 @@ class Client
     @logger.info "Initialized message service."
     @msg_service.start
     @logger.info "Running message service."
-    wait_all if blocking
+    submit_jobs(@jobs) unless @jobs.empty?
     return
   end
 
-  def send_jobs(jobs)
+  def submit_jobs(jobs)
     # Convert to a job list if a single job passed
     raise ArgumentError if jobs == nil
     jobs = [jobs] unless jobs.is_a? Array
-    jobs.select{!x.is_a? Job}.empty? or raise ArgumentError, 'Parameters should be a list of jobs or a single job'
+    jobs.reject{|x|x.is_a? Job}.empty? or raise ArgumentError, 'Parameters should be a list of jobs or a single job'
 
     @logger.info "Submitting #{jobs.size} job(s)"
-    job_id_list = @dispatcher.submit_jobs(jobs)
+    job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
     (@logger.error "Submission failed"; raise 'Submission failed') if !job_id_list or !job_id_list.is_a? Array
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     # Build a task queue for each job, indexed with job_id returned from dispatcher
@@ -91,7 +95,7 @@ class Client
         :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
         :job => jobs[i]
       }
-      j.task.each{|t| @submitted_jobs[job_id][:task_queue] << t}
+      jobs[i].task.each{|t| @submitted_jobs[job_id][:task_queue] << t} # FIXME j undefined
       @results[job_id] = [nil] * jobs[i].task.size
     end
     return job_id_list

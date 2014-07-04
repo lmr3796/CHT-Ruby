@@ -1,13 +1,16 @@
+require 'drb'
 require 'publisher'
 require 'thread'
 require 'timeout'
 require 'securerandom'
 
-require_relative 'base_server'
-require_relative 'decision_maker'
+require_relative 'common/rwlock_hash'
+
 require_relative 'job'
 require_relative 'message_service'
-require_relative 'common/rwlock_hash'
+
+require_relative 'base_server'
+require_relative 'decision_maker'
 
 class Dispatcher < BaseServer
   module DispatcherJobListChangeCallBack; end
@@ -19,6 +22,8 @@ class Dispatcher < BaseServer
   include DispatcherWorkerInterface
   include MessageServiceServerDelegator
 end
+
+#FIXME Publisher is synchronous, maybe have to change it into an async one?
 
 class Dispatcher::JobList < ReadWriteLockHash
   extend Publisher
@@ -60,13 +65,10 @@ class Dispatcher::ScheduleManager
     @lock = ReadWriteLock.new
     @worker_job_table = {}
     @job_worker_table = {}
+    @job_list = job_list
     @decision_maker = arg[:decision_maker]
     @status_checker = arg[:status_checker]
-    @on_schedule_callback = arg[:on_schedule_callback]
-
-    @job_list = job_list
-    @job_list.when(:submission, self, :on_job_submitted)
-    @job_list.when(:deletion, self, :on_job_deleted)
+    @on_schedule_callback = arg[:on_schedule]
   end
 
   def schedule_job()
@@ -74,7 +76,6 @@ class Dispatcher::ScheduleManager
     @lock.with_write_lock do
       job_running_time = @status_checker.job_running_time
       worker_avg_running_time = @status_checker.worker_avg_running_time
-
       cloned_job_list = Hash.new.merge(@job_list)
       workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN}
       # Schedule result:  {job_id => [worker1, worker2...]}
@@ -88,13 +89,12 @@ class Dispatcher::ScheduleManager
       @worker_job_table = ReadWriteLockHash.new
       @job_worker_table.keys.each do |job_id|
         workers = @job_worker_table[job_id]
-        workers.each do |worker|
-          @worker_job_table[worker] = job_id
-        end
+        workers.each{|worker| @worker_job_table[worker] = job_id}
       end
     end
-    @on_schedule_callback.call if @on_schedule_callback.respond_to? :call
+    @on_schedule_callback.call(@job_worker_table) if @on_schedule_callback.respond_to? :call
     @logger.info 'Updated schedule successfully'
+    @logger.debug "Current schedule: #{@job_worker_table}"
   end
 
   # Observer callbacks
@@ -122,21 +122,26 @@ class Dispatcher < BaseServer
 
     @client_job_list = ClientJobList.new
     @job_list = JobList.new @logger
-    @job_list.when(:submission, self, :on_job_submitted)
-    @job_list.when(:deletion, self, :on_job_deleted)
     @schedule_manager = ScheduleManager.new(@job_list,
                                             :status_checker => @status_checker,
                                             :decision_maker => @decision_maker,
-                                            #:on_schedule_callback => method(:clear_job_worker_queue),
-                                            :logger => @logger
-                                           )
+                                            :on_schedule => method(:on_reschedule),
+                                            :logger => @logger)
+    @job_list.subscribe(:submission, self, :on_job_submitted)
+    @job_list.subscribe(:submission, @schedule_manager, :on_job_submitted)
+    @job_list.subscribe(:deletion, self, :on_job_deleted)
+    @job_list.subscribe(:deletion, @schedule_manager, :on_job_deleted)
   end
 
-  def clear_job_worker_queue
-    occupied_workers = @status_checker.worker_status.select{|_,s|s == Worker::STATUS::OCCUPIED}
-    occupied_workers.each{|w,_|@status_checker.release_worker(w)}
+  def on_reschedule(schedule)
+    @status_checker.collect_status
   end
-  private :clear_job_worker_queue
+
+  def assign_worker_to_job(worker, job_id)
+    @logger.debug "Worker #{worker} will be assigned to #{job_id}"
+    job_assignment = [job_id, @client_job_list.get_client_by_job(job_id)]
+    DRbObject.new_with_uri(worker_uri(worker)).assign_job(job_assignment) # May have to clean this ??
+  end
 
   # General APIs
   def reschedule()
@@ -155,6 +160,10 @@ class Dispatcher < BaseServer
 end
 
 module Dispatcher::DispatcherJobListChangeCallBack
+  def on_job_submitted(_)
+    @logger.debug "Current jobs: #{@job_list.keys}"
+  end
+
   def on_job_deleted(change_list)
     # Clear the entry in @job_worker_queues[job_id]
     # Release nodes first
@@ -171,6 +180,7 @@ end
 module Dispatcher::DispatcherClientInterface
   def register_client
     client_id = SecureRandom.uuid
+    @client_job_list[client_id] = []
     @logger.info "Client #{client_id} registered."
     @msg_service_server.register(client_id)
     @logger.info "Message service of client #{client_id} registered."
@@ -185,11 +195,9 @@ module Dispatcher::DispatcherClientInterface
 
   def submit_jobs(job_list, client_id)
     job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
-    @client_list[client_id] += job_id_table.keys
     @logger.info "Job submitted: #{job_id_table.keys}"
+    @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
     @job_list.merge! job_id_table
-    @logger.debug "Current jobs: #{@job_list.keys}"
-    @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
@@ -223,10 +231,14 @@ module Dispatcher::DispatcherWorkerInterface
     @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize do
       next_job_assigned = @schedule_manager.worker_job_table[worker]
-      @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
       return if next_job_assigned == nil
-      push_message(@client_list.get_client_by_job(next_job_assigned), MessageService::Message.new(:worker_available))
+      assign_worker_to_job(worker, next_job_assigned)
+      worker_available_msg = MessageService::Message.new(:worker_available,
+                                                         :worker=>worker,
+                                                         :job_id=>next_job_assigned)
+      push_message(@client_job_list.get_client_by_job(next_job_assigned),worker_available_msg)
     end
+    return
   end
 end
 
