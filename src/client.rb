@@ -19,7 +19,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
   def on_worker_available(m)
     m.is_a? MessageService::Message or raise ArgumentError
-    @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}" 
+    @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
     job_id = m.content[:job_id]
     worker = m.content[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
@@ -79,12 +79,12 @@ end
 class Client
   include ClientMessageHandler
   attr_reader :uuid, :results
-  DEFAULT_THREAD_POOL_SIZE = 32
 
   def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
     DRb.start_service
     @rwlock = ReadWriteLock.new
     @submitted_jobs = ReadWriteLockHash.new
+    @job_done = ReadWriteLockHash.new
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
     @results = {}
@@ -99,8 +99,39 @@ class Client
     return
   end
 
+  def done?(job_id_list=nil)
+    @rwlock.with_read_lock do
+      # nil stands for all jobs
+      # Should not use default value parameter for obtaining this
+      # must be done using read lock
+      job_id_list = @submitted_jobs.keys if job_id_list == nil
+      raise ArgumentError if !job_id_list.is_a? Array
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
+      job_id_list.each{|j| return false unless @job_done[j]}
+    end
+    return true
+  end
+
+  def wait(job_id_list)
+    raise ArgumentError if !job_id_list.is_a? Array
+    raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
+    raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
+    unless done?(job_id_list)
+      @logger.debug "There are still jobs undone, keep waiting"
+      Thread::stop
+    end
+    @logger.info "Jobs #{job_id_list} are done!"
+    return
+  end
+
   def wait_all()
-    loop{}
+    # wait_all is a wait on all jobs.
+    unless done?
+      @logger.debug "There are still jobs undone, keep waiting"
+      Thread::stop
+    end
+    @logger.info "Jobs are all done!"
     return
   end
 
@@ -138,12 +169,14 @@ class Client
     raise ArgumentError, "ID amount mismatch" if job_id_list.size != jobs.size
     @logger.info "job uuids: #{job_id_list}"
 
+    @logger.info "Preparing local information of jobs: #{job_id_list}"
     jobs = Hash[job_id_list.zip(jobs)]
     job_id_list.each do |job_id|  # Build a task queue for each job, indexed with job_id returned from dispatcher
       @submitted_jobs[job_id] = {
         :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
         :job => jobs[job_id]
       }
+      @job_done[job_id] = false
       jobs[job_id].task.each do |t|
         t.job_id = job_id
         @submitted_jobs[job_id][:task_queue] << t
@@ -155,7 +188,6 @@ class Client
     raise 'Submissiion failure' if job_id_list != jobs.keys
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
-    @logger.info "Update local status of jobs: #{job_id_list}"
     return job_id_list
   end
 
@@ -168,16 +200,19 @@ class Client
 
     @rwlock.with_write_lock do
       results.each do |r|
-        raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id || r.task_id < 0
+        raise "Invalid task_id for #{job_id}" if r.task_id < 0
+        raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id
+        @logger.fatal @results[job_id]
         # TODO Conflict results might come before we delete it on worker.
         # We currently ignore this
         @results[job_id][r.task_id] = r
         @logger.info "Updated result of #{job_id}[#{r.task_id}]"
       end
     end
+
     if !@results[job_id].include? nil
       @logger.info "Job #{job_id} completed, ask to delete."
-      delete_job(job_id) 
+      delete_job(job_id)
     end
     return
   end
