@@ -6,6 +6,7 @@ class DecisionMaker < BaseServer
     super arg[:logger]
     @algorithm = alg
     @status_checker = status_checker
+    return
   end
   def schedule_job(job_list, worker_status, arg={})
     @logger.info "Rescheduling on #{job_list.keys}"

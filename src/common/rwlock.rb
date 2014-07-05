@@ -5,22 +5,21 @@ class ReadWriteLock
     @mutex = Mutex.new
     @rwlock = Mutex.new
     @read_count = 0
+    return
   end
 
   def with_read_lock()
     require_read_lock
-    result = yield
+    yield
   ensure
     release_read_lock
-    return result
   end
 
   def with_write_lock()
     require_write_lock
-    result = yield
+    yield
   ensure
     release_write_lock
-    return result
   end
 
   def require_read_lock()
@@ -28,7 +27,7 @@ class ReadWriteLock
       @rwlock.lock if @read_count == 0
       @read_count += 1
     end
-    p "Read lock acquired"
+    return
   end
 
   def release_read_lock()
@@ -37,17 +36,16 @@ class ReadWriteLock
       @read_count -= 1
       @rwlock.unlock if @read_count == 0
     end
-    p "Read lock released"
+    return
   end
 
   def require_write_lock()
-    @rwlock.lock
-    p "Write lock acquired"
+    return @rwlock.lock
   end
 
   def release_write_lock()
     @rwlock.unlock
-    p "Write lock released"
+    return
   end
 
   private :require_read_lock, :require_write_lock,
