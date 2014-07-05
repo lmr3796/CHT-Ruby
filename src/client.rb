@@ -204,7 +204,6 @@ class Client
       results.each do |r|
         raise "Invalid task_id for #{job_id}" if r.task_id < 0
         raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id
-        @logger.fatal @results[job_id]
         # TODO Conflict results might come before we delete it on worker.
         # We currently ignore this
         @results[job_id][r.task_id] = r
@@ -212,18 +211,22 @@ class Client
       end
     end
 
-    if !@results[job_id].include? nil
-      @logger.info "Job #{job_id} completed, ask to delete."
-      delete_job(job_id)
-    end
+    job_done(job_id) if !@results[job_id].include? nil
     return
   end
+
+  def job_done(job_id)
+    @logger.info "Job #{job_id} completed, ask to delete."
+    @rwlock.with_write_lock{@job_done[job_id] = true}
+    delete_job(job_id)
+
+    # Make main thread run if it's sleeping in #wait....
+    Thread::main.run and @logger.debug "Notifies main thread wait to check if done" if Thread::main.stop?  end
 
   def delete_job(job_id)
     @logger.info "Contact dispatcher to delete job #{job_id}"
     @dispatcher.delete_job(job_id, @uuid)
     @logger.info "Deleted job #{job_id}"
-    # TODO mark local entry...
     return
   end
 

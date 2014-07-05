@@ -12,7 +12,7 @@ def get_client()
 end
 def get_job(deadline=Time.now+300)
   j = Job.new
-  3.times { j.add_task Task.new('sleep',['5'])}
+  3.times { j.add_task Task.new('sleep',['3'])}
   j.deadline = deadline
   return j
 end
