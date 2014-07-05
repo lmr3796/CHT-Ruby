@@ -9,13 +9,16 @@ require_relative 'job'
 require_relative 'message_service'
 require_relative 'common/rwlock_hash'
 
+class ResultLostError; end
 
+# TODO: Reimplement this with mixin polymorphism!
 module ClientMessageHandler include MessageService::Client::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
 
   def on_worker_available(m)
+    m.is_a? MessageService::Message or raise ArgumentError
     @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}" 
     job_id = m.content[:job_id]
     worker = m.content[:worker]
@@ -26,7 +29,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @dispatcher.task_sent(job_id)
     @logger.debug "#{job_id} popped a task to worker #{worker}"
   rescue ThreadError # On empty task Queue
-    #FIXME this shouldn't happen
+    #TODO  Maybe fix this?
+    # This is a race condition that worker finishes and recome
+    # before we fetch result and delete job. It is however to costive to use protocol
+    # to avoid. Simply ignores it.
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     worker_server.release(@uuid)  # It takes client id for authentication
   rescue DRb::DRbConnError
@@ -36,14 +42,37 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   end
 
   def on_task_result_available(m)
-    return if @results[m[:job_id]][m[:task_id]] != nil  # Outdated result message
-    job_id = m[:job_id]
-    task_id = m[:task_id]
-    worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(m[:worker]))
-    results = worker_server.get_results(@uuid)
-    add_results(results, job_id)
-    redo_task(task_id, job_id) if @results[job_id][task_id] == nil
+    m.is_a? MessageService::Message or raise ArgumentError
+    job_id = m.content[:job_id]
+    task_id = m.content[:task_id]
+    worker = m.content[:worker]
+    return if @results[job_id][task_id] != nil  # Outdated result message
+
+    # Might retrieve results other than those in the message
+    worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
+    @logger.info "Fetching result of #{job_id}[#{task_id}] from #{worker}"
+    fetched_results = worker_server.get_results(@uuid, job_id)
+    @logger.info "Fetched result of #{job_id}[#{task_id}] from #{worker}"
+    add_results(fetched_results, job_id)
+
+    # Clear results that are on hand...
+    @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
+    to_delete = Hash[@results.map do |j_id, res_list|
+      obtained_tasks = res_list.each_index.select{|i|res_list[i] != nil}
+      obtained_tasks.empty? ? nil : [j_id, obtained_tasks]
+    end.compact]
+    clear_request = Worker::ClearResultRequest.new(@uuid, to_delete)
+    worker_server.clear_result(clear_request)
+    @logger.info "Obtained results of #{job_id} on worker #{worker} deleted"
+
+    # Notified to retrieve but not found, mark as lost
+    raise ResultLostError if @results[job_id][task_id] == nil
     return
+  rescue ResultLostError
+    # FIXME try to handle this
+    raise NotImplementedError
+    logger.error "Result of #{job_id}[#{task_id}] missing, ask to redo"
+    redo_task(task_id, job_id)
   end
 
 end
@@ -127,27 +156,38 @@ class Client
     raise 'Submissiion failure' if job_id_list != jobs.keys
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
-    @logger.info "Update local status of #{job_id_list}"
+    @logger.info "Update local status of jobs: #{job_id_list}"
     return job_id_list
   end
 
   def add_results(results, job_id)
-    raise ArgumentError if results == nil
-    raise ArgumentError if job_id == nil
-    results = [r] unless r.is_a? Array
+    results.is_a? Array or raise ArgumentError
     results.each do |r|
-      r == nil || r.is_a?(TaskResult) or raise ArgumentError, 'Invalid TaskResult(s)'
+      r.is_a? TaskResult or raise ArgumentError, 'Invalid TaskResult(s)'
       r.job_id == job_id or raise ArgumentError, 'Job id mismatched'
     end
+
     @rwlock.with_write_lock do
       results.each do |r|
         raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id || r.task_id < 0
-        raise 'Conflicted result' if @results[job_id][r.task_id] != nil
+        # TODO Conflict results might come before we delete it on worker.
+        # We currently ignore this
         @results[job_id][r.task_id] = r
+        @logger.info "Updated result of #{job_id}[#{r.task_id}]"
       end
     end
-    @dispatcher.delete_job(job_id) if !@results[job_id].include? nil
-    @logger.info "Job #{job_id} completed, ask to delete."
+    if !@results[job_id].include? nil
+      @logger.info "Job #{job_id} completed, ask to delete."
+      delete_job(job_id) 
+    end
+    return
+  end
+
+  def delete_job(job_id)
+    @logger.info "Contact dispatcher to delete job #{job_id}"
+    @dispatcher.delete_job(job_id, @uuid)
+    @logger.info "Deleted job #{job_id}"
+    # TODO mark local entry...
     return
   end
 

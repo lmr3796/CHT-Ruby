@@ -23,6 +23,7 @@ class StatusChecker < BaseServer
     return
   end
   def worker_uri(worker)
+    @worker_table.has_key? worker or raise "No worker #{worker} found"
     return @worker_table[worker].instance_variable_get("@uri")
   end
   def initialize(worker_table={},arg={})
@@ -96,6 +97,8 @@ class StatusChecker < BaseServer
     return
   end
   def delete_job(job_id_list)
+    raise ArgumentError if job_id_list == nil
+    job_id_list.is_a?Array or job_id_list = [job_id_list]
     @lock.with_write_lock do
       job_id_list.each do |job_id|
         @job_running_time.delete job_id

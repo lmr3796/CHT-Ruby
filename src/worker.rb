@@ -69,7 +69,7 @@ class Worker < BaseServer
       @logger.error("Invalid caller client: #{client_id}")
       return false 
     end
-    @status_checker.release_worker @name
+    @status_checker.release_worker(@name, false)  # For preventing it from looping
     return true
   end
 
@@ -111,8 +111,11 @@ class Worker < BaseServer
         @status = STATUS::AVAILABLE
         @result_manager.add_result(client_id, result)
       end
-      # TODO: Convert this 2 calls into message?
-      @dispatcher.on_task_done(@name, task.id, task.job_id, client_id)
+      @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+                                                                      :worker => @name,
+                                                                      :job_id => task.job_id,
+                                                                      :task_id => task.id))
+      # TODO: Convert this call into message?
       @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
     end
   end
@@ -145,47 +148,78 @@ class Worker < BaseServer
     return result
   end
 
-  def get_results(client_id)
-    return @result_manager.get_result_by_client(client_id)
+  # TODO: lower the cost of get_result
+  def get_results(client_id, job_id)
+    return @result_manager.get_result_by_client(client_id)[job_id]
   end
 
+  def clear_result(clear_request) # Delegator
+    clear_request.is_a? Worker::ClearResultRequest or raise ArgumentError
+    return @result_manager.clear_result(clear_request)
+  end
 end
 
 class Worker::TaskResultManager
   def initialize()
     @rwlock = ReadWriteLock.new
     # Following field won't be written concurrently
-    @task_result = Hash.new {|h,k| h[k] = []}
-    @task_result_by_client = Hash.new # Contains job_id
+    @task_result = Hash.new
+    @job_id_by_client = Hash.new # Contains job_id
   end
 
   def get_result_by_client(client_id)
     @rwlock.with_read_lock do
-      @task_result_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
-      return @task_result.select{|k,v|@task_result_by_client[client_id].include? k}
+      @job_id_by_client.has_key? client_id or raise "Client ID #{client_id} not found on this worker."
+      return @task_result.select{|k,v|@job_id_by_client[client_id].include? k}
     end
   end
 
   def add_result(client_id, result)
     result.is_a? TaskResult or raise ArgumentError
     @rwlock.with_write_lock do
+      @task_result[result.job_id] ||= []
       @task_result[result.job_id] << result
-      @task_result_by_client[client_id] ||= []
-      @task_result_by_client[client_id].include? result.job_id or
-        @task_result_by_client[client_id] << result.job_id
+      @job_id_by_client[client_id] ||= []
+      @job_id_by_client[client_id].include? result.job_id or
+        @job_id_by_client[client_id] << result.job_id
     end
+    return
   end
 
-  def delete_result(key={})
-    key.has_key? :client_id or raise ArgumentError, "Can't delete without client_id"
+  def clear_result(clear_request)
+    raise ArgumentError if !clear_request.is_a? Worker::ClearResultRequest
     @rwlock.with_write_lock do
-      if key.has_key? :client_id and key.has_key? :job_id_list
-        @task_result.delete_if{|k,v| (@task_result_by_client[:client_id] & key[:job_id_list]).include? k}
-      elsif key.has_key? :client_id
-        @task_result.delete_if{|k,v| key[:client_id].map{|c|task_result_by_client[c]}.flatten.include? k}
-      else
-        raise NotImplementedError
-      end
+      clear_request.execute(@task_result, @job_id_by_client)
+    end
+    return
+  end
+end
+
+class Worker::ClearResultRequest
+  class NoJobToDeleteError < ArgumentError; end
+  attr_reader :client_id, :to_delete
+  ALL = :ALL
+  def initialize(client_id, delete_table)
+    @client_id = client_id
+    self.to_delete = delete_table
+  end
+
+  def to_delete=(delete_table)
+    raise ArgumentError if !delete_table.is_a? Hash
+    raise NoJobToDeleteError, 'No jobs to delete' if delete_table.values.empty?
+
+    delete_table.values.
+      reject{|e| e == ALL || e.is_a?(Array)}.size == 0 or raise ArgumentError
+    @to_delete = delete_table
+  end
+
+  # Command Pattern
+  def execute(task_result, job_id_by_client)
+    @to_delete.select do |job_id,_|
+      job_id_by_client[@client_id].include? job_id
+    end.each do |job_id, task_id_list|
+      task_result[job_id] == [] and next if task_id_list == ALL
+      task_result[job_id].reject!{|r| task_id_list.include? r} # TODO Higher efficiency?
     end
   end
 end

@@ -25,7 +25,7 @@ end
 
 #FIXME Publisher is synchronous, maybe have to change it into an async one?
 
-class Dispatcher::JobList < ReadWriteLockHash
+class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
   extend Publisher
   can_fire :submission, :deletion
   def initialize(logger)
@@ -112,7 +112,8 @@ class Dispatcher::ScheduleManager
   end
 
   def on_job_deleted(change_list)
-    @worker_job_table.delete_if{|w,j| change_list.include? job_id}
+    @worker_job_table.delete_if{|worker,job_id| change_list.include? job_id}
+    @logger.info "Job #{change_list} deleted, reschedule"
     schedule_job
     return
   end
@@ -185,8 +186,6 @@ module Dispatcher::DispatcherJobListChangeCallBack
     # Clear the entry in @job_worker_queues[job_id]
     # Release nodes first
     change_list.each do |job_id|
-      @logger.info "Remove #{job_id} worker queue"
-      @job_worker_queues.delete job_id
       @logger.info "Unregistering #{job_id} from status checker"
       @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
       @logger.info "Unregistering #{job_id} from status checker"
@@ -223,15 +222,19 @@ module Dispatcher::DispatcherClientInterface
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
-  def delete_job(jobs)
+  def delete_job(jobs, client_id)
+    raise ArgumentError if jobs == nil || client_id == nil
     jobs.is_a? Array or jobs = [jobs]
+    raise ArgumentError if !(jobs - @client_job_list[client_id]).empty?
     jobs.each{|job_id|@job_list.delete(job_id)}
     @client_job_list[client_id].reject!{|job_id| jobs.include? job_id}
+    @logger.debug "Current jobs: #{@job_list.keys}"
     return
   end
 
   def task_redo(job_id)
     @job_list[job_id].task_redo
+    @logger.warn "A task of #{job_id} needs redo, reschedule"
     reschedule
     return
   end
