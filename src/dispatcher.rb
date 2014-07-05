@@ -263,28 +263,23 @@ end
 
 module Dispatcher::MessageServiceServerDelegator include MessageService::Server
   def get_clients()
-    @msg_service_server.get_clients()
-    return
+    return @msg_service_server.get_clients()
   end
 
   def register(client_id)
-    @msg_service_server.register(client_id)
-    return
+    return @msg_service_server.register(client_id)
   end
 
   def unregister(client_id)
-    @msg_service_server.unregister(client_id)
-    return
+    return @msg_service_server.unregister(client_id)
   end
 
   def push_message(client_id, message)
-    @msg_service_server.push_message(client_id, message)
-    return
+    return @msg_service_server.push_message(client_id, message)
   end
 
   def broadcast_message(message)
-    @msg_service_server.broadcast_message(message)
-    return
+    return @msg_service_server.broadcast_message(message)
   end
 
   def get_message(client_id, timeout_limit=5)
