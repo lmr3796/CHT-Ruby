@@ -4,9 +4,11 @@ require 'time'
 require 'thread'
 require 'securerandom'
 
-require_relative 'base_server'
-require_relative 'job.rb'
 require_relative 'common/rwlock'
+
+require_relative 'base_server'
+require_relative 'job'
+require_relative 'message_service'
 
 class Worker < BaseServer; end
 
@@ -76,6 +78,15 @@ class Worker < BaseServer
     @assignment.update{|_| assignment} 
     self.status = STATUS::OCCUPIED
     @logger.debug "Assigned with job:#{assignment.job_id}, client:#{assignment.client_id}"
+
+    # Send message to client and tell ready
+    client = @assignment.value.client_id
+    job_id = @assignment.value.job_id
+    worker_available_msg = MessageService::Message.new(:worker_available,
+                                                       :worker=>@name,
+                                                       :job_id=>job_id)
+    @logger.debug "Send message to tell client #{client} worker I'm ready."
+    @dispatcher.push_message(client, worker_available_msg)
     return
   end
 

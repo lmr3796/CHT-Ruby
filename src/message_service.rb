@@ -160,10 +160,10 @@ module MessageService
         msg_list = @msg_server.get_message(@uuid)
         begin
           msg_list.is_a? Array or raise 'Obtained stuff should be a list of Message from server'
-          @logger.debug "Retrieved #{msg_list.size} messages from server" if msg_list.size > 0
+          #@logger.debug "Retrieved #{msg_list.size} messages from server" if msg_list.size > 0
           next if msg_list.empty?
           msg_list.each do |m|
-            @logger.debug "Push message #{m.inspect} to message queue"
+            #@logger.debug "Push message #{m.inspect} to message queue"
             @msg_queue << m
           end
         rescue InvalidMessageError
@@ -175,10 +175,10 @@ module MessageService
 
     def process_message(m)
       m.is_a? Message or raise InvalidMessageError
-      @logger.debug "Received #{m}"
+      #@logger.debug "Received #{m}"
       handler_name = "on_#{m.type.to_s}"
       @handler.respond_to?(handler_name) or raise NoMatchingHandlerError
-      @logger.debug "Send #{m} to #{handler_name}"
+      #@logger.debug "Send #{m} to #{handler_name}"
       @handler.send(handler_name, m)  # The ruby way to invoke method by its name string
       return
     end
@@ -205,7 +205,7 @@ module MessageService
 
   module Client::MessageHandler # Message Handler Interface to expose
     def on_chat(m)  # For testing :P
-      @logger.debug "on_chat: Received \"#{m.message}\""
+      @logger.info "on_chat: Received \"#{m.message}\""
       return
     end
 

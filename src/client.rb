@@ -45,6 +45,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     redo_task(task_id, job_id) if @results[job_id][task_id] == nil
     return
   end
+
 end
 
 class Client
@@ -144,7 +145,9 @@ class Client
         raise 'Conflicted result' if @results[job_id][r.task_id] != nil
         @results[job_id][r.task_id] = r
       end
-    end # assign only on no result
+    end
+    @dispatcher.delete_job(job_id) if !@results[job_id].include? nil
+    @logger.info "Job #{job_id} completed, ask to delete."
     return
   end
 

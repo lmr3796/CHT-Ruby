@@ -42,6 +42,7 @@ class Dispatcher::JobList < ReadWriteLockHash
 
   def delete(job_id)
     super  # The job_id must be passed if super is not the first statement....
+    @logger.info "Job #{job_id} deleted"
     fire(:deletion, [job_id])
     return
   end
@@ -249,7 +250,6 @@ end
 module Dispatcher::DispatcherWorkerInterface
   # Worker APIs
   def on_task_done(worker, task_id, job_id, client_id)
-    @logger.fatal "#{__FILE__}: #{__LINE__}"
     return
   end
 
@@ -259,12 +259,6 @@ module Dispatcher::DispatcherWorkerInterface
       next_job_assigned = @schedule_manager.worker_job_table[worker]
       return if next_job_assigned == nil
       assign_worker_to_job(worker, next_job_assigned)
-      worker_available_msg = MessageService::Message.new(:worker_available,
-                                                         :worker=>worker,
-                                                         :job_id=>next_job_assigned)
-      client = @client_job_list.get_client_by_job(next_job_assigned)
-      @logger.debug "Send message to tell client #{client} worker #{worker} is ready"
-      push_message(client, worker_available_msg)
     end
     return
   end

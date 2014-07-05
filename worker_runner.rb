@@ -55,7 +55,7 @@ logger = Logger.new(STDERR)
 logger.level = CHT_Configuration::LOGGER_LEVEL
 status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
 status_checker = DRbObject.new_with_uri status_checker_druby_uri
-dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
+dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
 dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
 
 worker = Worker.new(options[:name],
