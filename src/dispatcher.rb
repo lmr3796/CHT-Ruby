@@ -232,6 +232,7 @@ module Dispatcher::DispatcherClientInterface
 
   def task_redo(job_id)
     @job_list[job_id].task_redo
+    reschedule
     return
   end
 
@@ -249,10 +250,6 @@ end
 
 module Dispatcher::DispatcherWorkerInterface
   # Worker APIs
-  def on_task_done(worker, task_id, job_id, client_id)
-    return
-  end
-
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
     @resource_mutex.synchronize do
