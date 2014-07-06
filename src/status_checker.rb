@@ -3,21 +3,27 @@ require 'eventmachine'
 
 require_relative 'base_server'
 require_relative 'worker'
-require_relative 'common/read_write_lock'
-require_relative 'common/read_write_lock_hash'
+require_relative 'common/rwlock'
+require_relative 'common/rwlock_hash'
 
 class StatusChecker < BaseServer
+  module WorkerInterface;end
+  include WorkerInterface
 
   def job_running_time()
     @lock.with_read_lock{return Hash[@job_running_time]}
+    return
   end
   def worker_avg_running_time()
     @lock.with_read_lock{return Hash[@worker_avg_running_time]}
+    return
   end
   def worker_status
     @lock.with_read_lock{return Hash[@worker_status_table]}
+    return
   end
   def worker_uri(worker)
+    @worker_table.has_key? worker or raise "No worker #{worker} found"
     return @worker_table[worker].instance_variable_get("@uri")
   end
   def initialize(worker_table={},arg={})
@@ -47,41 +53,9 @@ class StatusChecker < BaseServer
         end
       end
     end
+    return
   end
-  def register_worker(worker)
-    @lock.with_write_lock {
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
-      @logger.info "Worker: #{worker} registered; set to AVAILABLE"
-    }
-    @logger.info 'Asked to reschedule'
-    begin
-      @dispatcher.reschedule
-    rescue => e
-      @logger.error "Error reaching dispatcher"
-      @logger.debug e.message
-      @logger.debug e.backtrace.join("\n")
-    end
-    @dispatcher.on_worker_available(worker)
-  end
-  def release_worker(worker, notify=true)
-    @lock.with_write_lock {
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
-      @logger.info "Released worker: #{worker}"
-    }
-    @dispatcher.on_worker_available(worker) if notify
-  end
-  def occupy_worker(worker)
-    @lock.with_write_lock {
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
-      @logger.info "Occupied worker: #{worker}"
-    }
-  end
-  def worker_running(worker)
-    @lock.with_write_lock {
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
-      @logger.info "Mark running worker: #{worker}"
-    }
-  end
+
   def collect_status(workers=@worker_table.keys)
     @logger.info "Collecting status"
     @lock.with_write_lock do
@@ -105,24 +79,33 @@ class StatusChecker < BaseServer
     workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
       begin
         @dispatcher.on_worker_available w
-      rescue => e
+      rescue DRb::DRbConnError => e
         @logger.error "Error reaching dispatcher"
-        @logger.debug e.backtrace
+        @logger.error e.backtrace.join("\n")
       end
     end
+    return
   end
 
-  def register_job(job_id)
+  def register_job(job_id_list)
     @lock.with_write_lock do
-      @logger.info "Job #{job_id} registered for recording"
-      @job_running_time[job_id] = []
+      job_id_list.each do |job_id|
+        @job_running_time[job_id] = []
+        @logger.info "Job #{job_id} registered for recording"
+      end
     end
+    return
   end
-  def delete_job(job_id)
+  def delete_job(job_id_list)
+    raise ArgumentError if job_id_list == nil
+    job_id_list.is_a?Array or job_id_list = [job_id_list]
     @lock.with_write_lock do
-      @logger.info "Job #{job_id} removed from recording"
-      @job_running_time.delete job_id
+      job_id_list.each do |job_id|
+        @job_running_time.delete job_id
+        @logger.info "Job #{job_id} removed from recording"
+      end
     end
+    return
   end
 
   def log_running_time(job_id, time)
@@ -131,4 +114,53 @@ class StatusChecker < BaseServer
     return 
   end
 
+end
+
+module StatusChecker::WorkerInterface
+  def register_worker(worker)
+    @lock.with_write_lock do
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
+      @logger.info "Worker: #{worker} registered; set to AVAILABLE"
+    end
+    @logger.info 'Asked to reschedule'
+    begin
+      @dispatcher.reschedule
+    rescue => e
+      @logger.error "Error reaching dispatcher"
+      @logger.debug e.message
+      @logger.debug e.backtrace.join("\n")
+    end
+    @dispatcher.on_worker_available(worker)
+    return
+  end
+
+  def release_worker(worker, notify=true)
+    @lock.with_write_lock do
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
+      @logger.info "Released worker: #{worker}"
+    end
+    @dispatcher.on_worker_available(worker) if notify
+    return
+  end
+ 
+  def occupy_worker(worker)
+    @lock.with_write_lock do
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
+      @logger.info "Occupied worker: #{worker}"
+    end
+    return
+  end
+
+  def worker_running(worker)
+    @lock.with_write_lock do
+      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
+      @logger.info "Mark running worker: #{worker}"
+    end
+    return
+  end
+
+  def on_task_done(worker, task_id, job_id, client_id)
+    release_worker(worker)
+    return
+  end
 end

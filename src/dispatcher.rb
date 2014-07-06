@@ -1,218 +1,291 @@
+require 'drb'
+require 'publisher'
 require 'thread'
+require 'timeout'
 require 'securerandom'
+
+require_relative 'common/rwlock_hash'
+
+require_relative 'job'
+require_relative 'message_service'
 
 require_relative 'base_server'
 require_relative 'decision_maker'
-require_relative 'common/read_write_lock_hash'
+
+class Dispatcher < BaseServer
+  module DispatcherJobListChangeCallBack; end
+  module DispatcherClientInterface; end
+  module DispatcherWorkerInterface; end
+  module MessageServiceServerDelegator; end
+  include DispatcherJobListChangeCallBack
+  include DispatcherClientInterface
+  include DispatcherWorkerInterface
+  include MessageServiceServerDelegator
+end
+
+#FIXME Publisher is synchronous, maybe have to change it into an async one?
+
+class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
+  extend Publisher
+  can_fire :submission, :deletion
+  def initialize(logger)
+    super()
+    @logger = logger
+    return
+  end
+
+  def []=(job_id, job)
+    r = super
+    fire(:submission, [job_id])
+    return r
+  end
+
+  def delete(job_id)
+    super  # The job_id must be passed if super is not the first statement....
+    @logger.info "Job #{job_id} deleted"
+    fire(:deletion, [job_id])
+    return
+  end
+
+  def merge!(jobs)
+    super
+    fire(:submission, jobs.keys)
+    return self
+  end
+end
+
+class Dispatcher::ClientJobList < ReadWriteLockHash
+  def get_client_by_job(job_id)
+    each{|c, jl| return c if jl.include?(job_id)}
+    return
+  end
+end
+
+class Dispatcher::ScheduleManager
+  attr_reader :job_worker_table, :worker_job_table
+  attr_writer :status_checker, :decision_maker
+
+  def initialize(job_list, arg={})
+    @logger = arg[:logger]
+    @lock = ReadWriteLock.new
+    @worker_job_table = {}
+    @job_worker_table = {}
+    @job_list = job_list
+    @decision_maker = arg[:decision_maker]
+    @status_checker = arg[:status_checker]
+    @on_schedule_callback = arg[:on_schedule]
+    return
+  end
+
+  def schedule_job()
+    @logger.info 'Updating schedule'
+    @lock.with_write_lock do
+      job_running_time = @status_checker.job_running_time
+      worker_avg_running_time = @status_checker.worker_avg_running_time
+      cloned_job_list = Hash.new.merge(@job_list)
+      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN}
+      # Schedule result:  {job_id => [worker1, worker2...]}
+      @job_worker_table = @decision_maker.schedule_job(
+        cloned_job_list,
+        workers_alive, # Don't schedule on downed workers
+        :job_running_time=>job_running_time,
+        :worker_avg_running_time => worker_avg_running_time
+      )
+
+      @worker_job_table = ReadWriteLockHash.new
+      @job_worker_table.keys.each do |job_id|
+        workers = @job_worker_table[job_id]
+        workers.each{|worker| @worker_job_table[worker] = job_id}
+      end
+    end
+    @on_schedule_callback.call(@job_worker_table) if @on_schedule_callback.respond_to? :call
+    @logger.info 'Updated schedule successfully'
+    @logger.debug "Current schedule: #{@job_worker_table}"
+    return
+  end
+
+  # Observer callbacks
+  def on_job_submitted(change_list)
+    schedule_job
+    @status_checker.register_job(change_list)
+    return
+  end
+
+  def on_job_deleted(change_list)
+    @worker_job_table.delete_if{|worker,job_id| change_list.include? job_id}
+    @logger.info "Job #{change_list} deleted, reschedule"
+    schedule_job
+    return
+  end
+
+end
 
 class Dispatcher < BaseServer
   attr_writer :status_checker, :decision_maker
 
-  class JobList < ReadWriteLockHash
-    def initialize(logger)
-      super()
-      @subscribe_list_mutex = Mutex.new
-      @job_list_subscribers = []
-      @merge_mutex = Mutex.new
-      @logger = logger
-    end
-
-    # Observer pattern
-    def subscribe_job_list_change(subscriber)
-      @subscribe_list_mutex.synchronize {@job_list_subscribers << subscriber}
-    end
-    def publish_job_submitted(job_id_list)
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_submitted job_id_list}
-    end
-    def publish_job_deleted(job_id)
-      @logger.info "Publishing deletion of #{job_id}"
-      @job_list_subscribers.each {|subscriber| subscriber.on_job_deleted job_id}
-    end
-
-    # TODO: Hook notifier on writing methods
-    # TODO: Refactor the hook shit, there may be something fancy in ruby to do so...
-    def []=(job_id, job)
-      super
-      publish_job_submitted [job_id]
-    end
-
-    def delete(*args)
-      super  # The job_id must be passed if super is not the first statement....
-      job_id = args[0]
-      publish_job_deleted job_id
-    end
-
-    def merge!(*args)
-      super
-      publish_job_submitted(keys)
-      return self
-    end
-
-  end
-
-  class ScheduleManager
-    attr_reader :job_worker_table, :worker_job_table
-    attr_writer :status_checker, :decision_maker
-    def initialize(job_list, arg={})
-      @lock = ReadWriteLock.new
-      @worker_job_table = {}
-      @job_worker_table = {}
-      @decision_maker = arg[:decision_maker]
-      @status_checker = arg[:status_checker]
-      @job_list = job_list
-      @job_list.subscribe_job_list_change(self)
-      @logger = arg[:logger]
-    end
-
-    def schedule_job()
-      @logger.info 'Updating schedule'
-      @lock.with_write_lock {
-        worker_can_be_scheduled = @status_checker.worker_status.delete_if{|w,s| s == Worker::STATUS::DOWN} # Don't schedule on downed workers
-        job_running_time = @status_checker.job_running_time
-        worker_avg_running_time = @status_checker.worker_avg_running_time
-
-        # {job_id => [worker1, worker2...]}
-        cloned_job_list = Hash.new.merge Marshal.load(Marshal.dump(@job_list))
-        @job_worker_table = @decision_maker.schedule_job cloned_job_list, worker_can_be_scheduled,
-          :job_running_time=>job_running_time, :worker_avg_running_time => worker_avg_running_time
-
-
-        @worker_job_table = ReadWriteLockHash.new
-        @job_worker_table.keys.each { |job_id|
-          # TODO: maybe only update the table with those changed
-          workers = @job_worker_table[job_id]
-          workers.each { |worker|
-            @worker_job_table[worker] = job_id
-          }
-        }
-      }
-      @logger.info 'Updated schedule successfully'
-    end
-
-    # Observer callbacks
-    def on_job_submitted(job_id_list)
-      schedule_job
-    end
-    def on_job_deleted(job_id)
-      @worker_job_table.delete_if{|w,j| j == job_id}
-      schedule_job
-    end
-
-  end
-
   def initialize(arg={})
     super arg[:logger]
     @resource_mutex = Mutex.new
-    @job_worker_queues = ReadWriteLockHash.new
-    @job_list = JobList.new @logger
+    #@job_worker_queues = ReadWriteLockHash.new
     @status_checker = arg[:status_checker]
     @decision_maker = arg[:decision_maker]
-    @schedule_manager = ScheduleManager.new @job_list,
-      :status_checker => @status_checker,
-      :decision_maker => @decision_maker,
-      :logger => @logger
-    @job_list.subscribe_job_list_change(self) # Make sure it subscribes after schedule manager
+    @msg_service_server = MessageService::BasicServer.new
+
+    @client_job_list = ClientJobList.new
+    @job_list = JobList.new @logger
+    @schedule_manager = ScheduleManager.new(@job_list,
+                                            :status_checker => @status_checker,
+                                            :decision_maker => @decision_maker,
+                                            :on_schedule => method(:on_reschedule),
+                                            :logger => @logger)
+    @job_list.subscribe(:submission, self, :on_job_submitted)
+    @job_list.subscribe(:submission, @schedule_manager, :on_job_submitted)
+    @job_list.subscribe(:deletion, self, :on_job_deleted)
+    @job_list.subscribe(:deletion, @schedule_manager, :on_job_deleted)
+    return
   end
 
-  # Client APIs
-  def submit_jobs(job_list)
-    job_id_table = Hash[job_list.map {|job| [SecureRandom.uuid, job]}]
-    @logger.info "Job submitted: #{job_id_table.keys}"
-    @job_list.merge! job_id_table
-    @logger.debug "Current jobs: #{@job_list.keys}"
-    @logger.debug "Current schedule: #{@schedule_manager.job_worker_table}"
-    return job_id_table.keys  # Returning a UUID list stands for acceptance
-  end
-  def require_worker(job_id)
-    # TODO: what if queue popped but not used? ====> more communications
-    @logger.info "#{job_id} requires a worker"
-    worker = @job_worker_queues[job_id].pop()
-    @logger.info "#{job_id} gets worker #{worker}"
-    return worker
-  end
-  def one_task_done(job_id)
-    @job_list[job_id].one_task_done
-  end
-  def job_done(job_id)
-    @logger.info "#{job_id} is done"
-    @job_list.delete(job_id)
-  end
-  def reschedule()
-    @schedule_manager.schedule_job
+  def on_reschedule(schedule)
+    @status_checker.collect_status
+    return
   end
 
-  # Worker APIs
-  def on_worker_available(worker)
-    @logger.info "Worker #{worker} is available"
-    @resource_mutex.synchronize {
-      next_job_assigned = @schedule_manager.worker_job_table[worker]
-      @logger.debug "Worker #{worker} will be assigned to #{next_job_assigned.inspect}"
-      return unless @job_worker_queues[next_job_assigned]
-      waiting_workers_of_next_job_assigned = @job_worker_queues[next_job_assigned].size
-      waiting_threads_of_next_job_assigned = @job_worker_queues[next_job_assigned].num_waiting
-      @logger.debug "Worker #{worker} pushed to the queue of #{next_job_assigned.inspect}"
-      @job_worker_queues[next_job_assigned].push(worker)
-      @status_checker.occupy_worker worker
-      @logger.debug "#{next_job_assigned} queue has #{waiting_workers_of_next_job_assigned} waiting workers, #{waiting_threads_of_next_job_assigned} threads waiting it"
-    }
+  def assign_worker_to_job(worker, job_id)
+    @logger.debug "Worker #{worker} will be assigned to #{job_id}"
+    job_assignment = [job_id, @client_job_list.get_client_by_job(job_id)]
+    job_assignment = Worker::JobAssignment.new(job_id, @client_job_list.get_client_by_job(job_id))
+    DRbObject.new_with_uri(worker_uri(worker)).assign_job(job_assignment) # May have to clean this ??
+    return
   end
-
 
   # General APIs
-  def worker_status()
-    # TODO: implement this
-    raise NotImplementedError
+  def reschedule()
+    @schedule_manager.schedule_job
+    return
   end
+
   def worker_uri(worker)
-    return @status_checker.worker_uri worker
+    return @status_checker.worker_uri(worker)
   end
 
   def log_job_worker_queue
-    queue_status = @job_worker_queues.map{|k,v| [k, "#{v.size} wrks, #{v.num_waiting} waiting"]}
+    queue_status = @job_worker_queues.map{|j,wq| [j, "#{wq.size} wrks, #{wq.num_waiting} waiting"]}
     @logger.warn "Current queue status: #{queue_status}"
+    return
   end
 
-  # Observer callbacks
-  def on_job_submitted(job_id_list)
-    job_id_list.each do |job_id|
-      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      # !!!NEVER directly cover it with new queue, threads are waiting on the old queues!!!
-      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      if @job_worker_queues.has_key? job_id
-        @job_worker_queues[job_id].clear
-      else
-        @job_worker_queues[job_id] = Queue.new
-        @status_checker.register_job job_id # Can't make this an observer in status checker for dependency
-      end
-    end
-    # TODO: might need to refactor to observers...
-    @logger.info "Collecting status from status checker"
-    @status_checker.collect_status
-    worker_status = @status_checker.worker_status
-    @logger.info "Current worker status: #{worker_status}"
-    worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
-      on_worker_available(w)
-    end
+end
+
+module Dispatcher::DispatcherJobListChangeCallBack
+  def on_job_submitted(_)
+    @logger.debug "Current jobs: #{@job_list.keys}"
+    return
   end
 
-  def on_job_deleted(job_id)
+  def on_job_deleted(change_list)
     # Clear the entry in @job_worker_queues[job_id]
     # Release nodes first
-    @logger.debug "Clearing #{job_id} worker queue"
-    until @job_worker_queues[job_id].empty? do
-      worker = @job_worker_queues[job_id].pop
-      @status_checker.release_worker worker
+    change_list.each do |job_id|
+      @logger.info "Unregistering #{job_id} from status checker"
+      @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
+      @logger.info "Unregistering #{job_id} from status checker"
     end
-    # FIXME: very possible bug here
-    @logger.warn "Remove #{job_id} worker queue"
-    @job_worker_queues.delete job_id
-    # TODO: might need to refactor to observers...
-    @schedule_manager.schedule_job
-    @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
-    @status_checker.collect_status
-    @status_checker.worker_status.select{|w,s|s == Worker::STATUS::AVAILABLE}.each do |w,s|
-      on_worker_available(w)
-    end
+    return
+  end
+end
+
+module Dispatcher::DispatcherClientInterface
+  def register_client
+    client_id = SecureRandom.uuid
+    @client_job_list[client_id] = []
+    @logger.info "Client #{client_id} registered."
+    @msg_service_server.register(client_id)
+    @logger.info "Message service of client #{client_id} registered."
+    return client_id
   end
 
+  def unregister_client(client)
+    @client_message_queue[client.uuid].clear
+    @client_message_queue.delete client.uuid
+    @logger.info "Client #{client.uuid} unregistered."
+    return
+  end
+
+  def generate_job_id(job_list, client_id)
+    return job_list.map{|job| SecureRandom.uuid}
+  end
+
+  def submit_jobs(job_id_table, client_id)
+    @logger.info "Job submitted: #{job_id_table.keys}"
+    @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
+    @job_list.merge! job_id_table
+    return job_id_table.keys  # Returning a UUID list stands for acceptance
+  end
+
+  def delete_job(jobs, client_id)
+    raise ArgumentError if jobs == nil || client_id == nil
+    jobs.is_a? Array or jobs = [jobs]
+    raise ArgumentError if !(jobs - @client_job_list[client_id]).empty?
+    jobs.each{|job_id|@job_list.delete(job_id)}
+    @client_job_list[client_id].reject!{|job_id| jobs.include? job_id}
+    @logger.debug "Current jobs: #{@job_list.keys}"
+    return
+  end
+
+  def task_redo(job_id)
+    @job_list[job_id].task_redo
+    @logger.warn "A task of #{job_id} needs redo, reschedule"
+    reschedule
+    return
+  end
+
+  def task_sent(job_id)
+    @job_list[job_id].task_sent
+    return
+  end
+
+  def on_job_done(job_id)
+    @logger.info "#{job_id} is done"
+    @job_list.delete(job_id)
+    return
+  end
+end
+
+module Dispatcher::DispatcherWorkerInterface
+  # Worker APIs
+  def on_worker_available(worker)
+    @logger.info "Worker #{worker} is available"
+    @resource_mutex.synchronize do
+      next_job_assigned = @schedule_manager.worker_job_table[worker]
+      return if next_job_assigned == nil
+      assign_worker_to_job(worker, next_job_assigned)
+    end
+    return
+  end
+end
+
+module Dispatcher::MessageServiceServerDelegator include MessageService::Server
+  def get_clients()
+    return @msg_service_server.get_clients()
+  end
+
+  def register(client_id)
+    return @msg_service_server.register(client_id)
+  end
+
+  def unregister(client_id)
+    return @msg_service_server.unregister(client_id)
+  end
+
+  def push_message(client_id, message)
+    return @msg_service_server.push_message(client_id, message)
+  end
+
+  def broadcast_message(message)
+    return @msg_service_server.broadcast_message(message)
+  end
+
+  def get_message(client_id, timeout_limit=5)
+    return @msg_service_server.get_message(client_id, timeout_limit)
+  end
 end
