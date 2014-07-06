@@ -95,10 +95,7 @@ class StatusChecker < BaseServer
   def release_zombie_occupied_worker(workers=@worker_server_table.keys)
     # Free occupied workers
     workers.select{|w|@worker_status_table[w] == Worker::STATUS::OCCUPIED}.each do |w|
-      worker_server = @worker_server_table[w]
-      assigned_job = worker_server.assignment.job_id
-      @logger.warn "Worker #{w} is assigned with a non-existent job #{assigned_job} (probably done), release it"
-      worker_server.status = Worker::STATUS::AVAILABLE if !@dispatcher.has_job? assigned_job
+      @worker_server_table[w].validate_occupied_assignment
     end
     @logger.info "Released workers occupied by zombie jobs"
   end

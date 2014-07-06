@@ -32,7 +32,7 @@ class Worker < BaseServer
     super arg[:logger]
     @id = SecureRandom::uuid()
     @name = name
-    @lock = Mutex.new
+    @mutex = Mutex.new
     @status = STATUS::UNKNOWN
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
@@ -43,7 +43,7 @@ class Worker < BaseServer
   end
 
   def register()
-    @logger.info "Notifies status checker for coming"
+    @logger.debug "Notifies status checker for coming"
     @status_checker.register_worker @name
     return
   rescue => e
@@ -58,7 +58,7 @@ class Worker < BaseServer
     @status = s
     @logger.info "Worker status set to #{s}"
     @status_checker.mark_worker_status(@name, @status)
-    @logger.info "Notified status checker for worker status set to #{s}"
+    @logger.debug "Notified status checker for worker status set to #{s}"
 
     # Refactor this to a callback table if necessary; currently not.
     @dispatcher.on_worker_available(@name) if s == STATUS::AVAILABLE
@@ -88,7 +88,7 @@ class Worker < BaseServer
   end
 
   def release(client_id) # Should only be invoked by client
-    if assignment.client_id != client_id
+    if self.assignment.client_id != client_id
       @logger.error("Invalid caller client: #{client_id}")
       return false
     end
@@ -96,14 +96,23 @@ class Worker < BaseServer
     return true
   end
 
+  def validate_occupied_assignment
+    return if @status != STATUS::OCCUPIED
+    @mutex.synchronize do
+      self.status = STATUS::AVAILABLE if @dispatcher.has_job?(self.assignment.job_id)
+    end
+  end
+
   def submit_task(task, client_id)
     task.is_a? Task or raise ArgumentError
-    @lock.synchronize do
-      assignment.job_id == task.job_id or raise 'Job ID mismatch'
-      assignment.client_id == client_id or raise 'Client ID mismatch'
+    @mutex.synchronize do
+      self.assignment.job_id == task.job_id or raise 'Job ID mismatch'
+      self.assignment.client_id == client_id or raise 'Client ID mismatch'
       @assignment.update{|v| v.task = task; v}
+      @logger.warn "#{task.job_id}[#{task.id}] submitted"
       Thread::main.run
     end
+    # FIXME must make sure assignment not overriden before executed!
     return
   end
 
@@ -112,9 +121,9 @@ class Worker < BaseServer
       task = nil
       client_id = nil
       Thread.stop
-      @lock.synchronize do  # Worker is dedicated
+      @mutex.synchronize do  # Worker is dedicated
         self.status = STATUS::BUSY
-        task, client_id = [assignment.task, assignment.client_id]
+        task, client_id = [self.assignment.task, self.assignment.client_id]
         result = run_task(task)
         @result_manager.add_result(client_id, result)
       end
@@ -127,11 +136,11 @@ class Worker < BaseServer
   end
 
   def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @logger.info "Running task of job #{task.job_id}"
+    @logger.warn "#{task.job_id}[#{task.id}] running."
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
-    @logger.info "Finished task of job #{task.job_id} in #{result.run_time} seconds"
+    @logger.debug "Finished task of job #{task.job_id} in #{result.run_time} seconds"
     return result
   end
 
@@ -160,14 +169,12 @@ class Worker < BaseServer
 
   def clear_result(clear_request) # Delegator
     clear_request.is_a? Worker::ClearResultRequest or raise ArgumentError
-    return @result_manager.clear_result(clear_request)
+    return @result_manager.clear_result(clear_request, @logger)
   end
 
   def log_running_time(job_id, time)
-    @logger.info "Logs runtime to self"
     @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
-    @logger.info "Logs runtime to status_checker"
-    @status_checker.log_running_time job_id, time
+    @status_checker.log_running_time(job_id, time)
     return
   end
 end
@@ -199,10 +206,10 @@ class Worker::TaskResultManager
     return
   end
 
-  def clear_result(clear_request)
+  def clear_result(clear_request, logger)
     raise ArgumentError if !clear_request.is_a? Worker::ClearResultRequest
     @rwlock.with_write_lock do
-      clear_request.execute(@task_result, @job_id_by_client)
+      clear_request.execute(@task_result, @job_id_by_client, logger)
     end
     return
   end
@@ -227,10 +234,17 @@ class Worker::ClearResultRequest
   end
 
   # Command Pattern
-  def execute(task_result, job_id_by_client)
-    @to_delete.select{|job_id,_|job_id_by_client[@client_id].include? job_id}.each do |job_id, task_id_list|
-      task_result[job_id] == [] and next if task_id_list == ALL
-      task_result[job_id].reject!{|r| task_id_list.include? r.task_id} # TODO Higher efficiency?
+  def execute(task_result, job_id_by_client, logger)
+    @to_delete.select{|job_id,_|job_id_by_client[@client_id].include? job_id}.each do |job_id, t_id_list|
+      task_result[job_id] == [] and next if t_id_list == ALL
+      task_result[job_id].reject!{|r|
+        if t_id_list.include? r.task_id
+          logger.warn "#{job_id}[#{r.task_id}] deleted."
+          true
+        else
+          false
+        end
+      } # TODO Higher efficiency?
     end
   end
 end

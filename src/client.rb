@@ -11,6 +11,8 @@ require_relative 'common/rwlock_hash'
 
 class ResultLostError; end
 
+# FIXME: Result missing...
+#
 # TODO: Reimplement this with mixin polymorphism!
 module ClientMessageHandler include MessageService::Client::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
@@ -27,7 +29,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     worker_server.submit_task(task, @uuid)
     @dispatcher.task_sent(job_id)
-    @logger.debug "#{job_id} popped a task to worker #{worker}"
+    @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
   rescue ThreadError # On empty task Queue
     # FIXME The trailing ones might come before waiter returns...
     # This is a race condition that worker finishes and recome
@@ -46,13 +48,15 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     job_id = m.content[:job_id]
     task_id = m.content[:task_id]
     worker = m.content[:worker]
-    return if @results[job_id][task_id] != nil  # Outdated result message
+    @logger.debug "Result of #{job_id}[#{task_id}] is ready"
+    # Outdated result message
+    @logger.debug "Result of #{job_id}[#{task_id}] is already on hand" and return if @results[job_id][task_id] != nil
 
     # Might retrieve results other than those in the message
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     @logger.info "Fetching result of #{job_id}[#{task_id}] from #{worker}"
     fetched_results = worker_server.get_results(@uuid, job_id)
-    @logger.info "Fetched result of #{job_id}[#{task_id}] from #{worker}"
+    @logger.info "Fetched #{fetched_results.size} result from #{worker}"
     add_results(fetched_results, job_id)
 
     # Clear results that are on hand...
@@ -64,7 +68,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     end
     clear_request = Worker::ClearResultRequest.new(@uuid, to_delete)
     worker_server.clear_result(clear_request)
-    @logger.info "Obtained results of #{job_id} on worker #{worker} deleted"
+    @logger.info "Deleted obtained results of #{job_id} on worker #{worker}"
 
     # Notified to retrieve but not found, mark as lost
     raise ResultLostError if @results[job_id][task_id] == nil
