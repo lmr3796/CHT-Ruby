@@ -83,7 +83,8 @@ class Dispatcher::ScheduleManager
       job_running_time = @status_checker.job_running_time
       worker_avg_running_time = @status_checker.worker_avg_running_time
       cloned_job_list = Hash.new.merge(@job_list)
-      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN}
+      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
+
       # Schedule result:  {job_id => [worker1, worker2...]}
       @job_worker_table = @decision_maker.schedule_job(
         cloned_job_list,
@@ -185,6 +186,8 @@ end
 module Dispatcher::DispatcherJobListChangeCallBack
   def on_job_submitted(_)
     @logger.debug "Current jobs: #{@job_list.keys}"
+    # Validate zombie assignment occupations on job_list_change
+    @status_checker.release_zombie_occupied_worker
     return
   end
 
@@ -193,9 +196,12 @@ module Dispatcher::DispatcherJobListChangeCallBack
     # Release nodes first
     change_list.each do |job_id|
       @logger.info "Unregistering #{job_id} from status checker"
-      @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
+      @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
       @logger.info "Unregistering #{job_id} from status checker"
     end
+    # Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
+    @status_checker.release_zombie_occupied_worker
+    # P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
     return
   end
 end

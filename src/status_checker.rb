@@ -95,22 +95,27 @@ class StatusChecker < BaseServer
   def release_zombie_occupied_worker(workers=@worker_server_table.keys)
     # Free occupied workers
     workers.select{|w|@worker_status_table[w] == Worker::STATUS::OCCUPIED}.each do |w|
-      @worker_server_table[w].validate_occupied_assignment
+      @logger.debug "Worker #{w} is occupied; ask to validate"
+      valid = @worker_server_table[w].validate_occupied_assignment
+      @logger.debug "Worker #{w} assignment valid: #{valid}"
     end
     @logger.info "Released workers occupied by zombie jobs"
   end
 
   def awake_idle_worker(workers=@worker_server_table.keys)
     # Force all idle available workers to pull for possible jobs
+    worker_failure = false
     workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
       begin
-        @dispatcher.on_worker_available w
+        @worker_server_table[w].awake
       rescue DRb::DRbConnError => e
-        @logger.error "Error reaching dispatcher"
+        @logger.error "Error reaching worker #{w}"
         @logger.error e.backtrace.join("\n")
+        @worker_status_table[w] = Worker::STATUS::DOWN
       end
     end
     @logger.info "Awoke idle available workers"
+    @logger.warn "Some workers are down, need reschedule" and reschedule if worker_failure
     return
   end
 
@@ -124,13 +129,13 @@ class StatusChecker < BaseServer
     return
   end
 
-  def delete_job(job_id_list)
+  def delete_job_from_logging(job_id_list)
     raise ArgumentError if job_id_list == nil
     job_id_list.is_a?Array or job_id_list = [job_id_list]
     @lock.with_write_lock do
       job_id_list.each do |job_id|
         @job_running_time.delete job_id
-        @logger.info "Job #{job_id} removed from recording"
+        @logger.info "Job #{job_id} removed from logging"
       end
     end
     return
@@ -147,22 +152,22 @@ end
 module StatusChecker::WorkerInterface
   def register_worker(worker)
     begin
-      @worker_server_table[worker].status = Worker::STATUS::AVAILABLE
+      mark_worker_status(worker, Worker::STATUS::AVAILABLE)
       @logger.info "Worker: #{worker} registered."
-      @logger.info 'Asked to reschedule'
+      begin
+        @logger.info 'Asked to reschedule'
+        @dispatcher.reschedule
+      rescue DRb::DRbConnError => e
+        @logger.error "Error reaching dispatcher"
+        @logger.debug e.message
+        @logger.debug e.backtrace.join("\n")
+      end
+      @worker_server_table[worker].status = Worker::STATUS::AVAILABLE
     rescue DRb::DRbConnError => e
       @logger.error "Error reaching the registering worker #{worker}"
       @logger.debug e.message
       @logger.debug e.backtrace.join("\n")
       raise "Can't reach worker, is your DRb service running?"
-    end
-    begin
-      @dispatcher.reschedule
-      @dispatcher.on_worker_available(worker)
-    rescue DRbConnError => e
-      @logger.error "Error reaching dispatcher"
-      @logger.debug e.message
-      @logger.debug e.backtrace.join("\n")
     end
     return
   end
@@ -171,7 +176,7 @@ module StatusChecker::WorkerInterface
     raise ArgumentError if !Worker::STATUS::constants.include? status
     @lock.with_write_lock do
       @worker_status_table[worker] = status
-      @logger.info "Mark worker #{worker} as #{status}"
+      @logger.debug "Mark worker #{worker} as #{status}"
     end
     return
   end

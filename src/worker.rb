@@ -69,16 +69,22 @@ class Worker < BaseServer
     return @assignment.value
   end
 
+  # Should only be invoked while on_worker_available, so there 
+  # shouldn't be any race condition here.
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
     @assignment.update{|_| a}
-    @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
-
+    @logger.info "Assigned with job:#{a.job_id}, client:#{a.client_id}"
     self.status = STATUS::OCCUPIED
+    tell_client_ready
+    return
+  end
 
+  def tell_client_ready
     # Send message to client and tell ready
-    client = @assignment.value.client_id
-    job_id = @assignment.value.job_id
+    a = self.assignment
+    client = a.client_id
+    job_id = a.job_id
     worker_available_msg = MessageService::Message.new(:worker_available,
                                                        :worker=>@name,
                                                        :job_id=>job_id)
@@ -87,7 +93,7 @@ class Worker < BaseServer
     return
   end
 
-  def release(client_id) # Should only be invoked by client
+  def release(client_id)            # Should only be invoked by client
     if self.assignment.client_id != client_id
       @logger.error("Invalid caller client: #{client_id}")
       return false
@@ -96,23 +102,31 @@ class Worker < BaseServer
     return true
   end
 
-  def validate_occupied_assignment
-    return if @status != STATUS::OCCUPIED
-    @mutex.synchronize do
-      self.status = STATUS::AVAILABLE if @dispatcher.has_job?(self.assignment.job_id)
-    end
+  def awake                         # AVAILABLE ONLY
+    @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
+    @dispatcher.on_worker_available(@name)
+  end
+  def validate_occupied_assignment  # OCCUPIED ONLY
+    @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
+    valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
+    
+    return true if valid
+
+    @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+    self.status = STATUS::AVAILABLE 
+    return false
   end
 
   def submit_task(task, client_id)
     task.is_a? Task or raise ArgumentError
     @mutex.synchronize do
-      self.assignment.job_id == task.job_id or raise 'Job ID mismatch'
-      self.assignment.client_id == client_id or raise 'Client ID mismatch'
+      a = self.assignment
+      a.job_id == task.job_id or raise 'Job ID mismatch'
+      a.client_id == client_id or raise 'Client ID mismatch'
       @assignment.update{|v| v.task = task; v}
-      @logger.warn "#{task.job_id}[#{task.id}] submitted"
+      @logger.debug "#{task.job_id}[#{task.id}] submitted"
       Thread::main.run
     end
-    # FIXME must make sure assignment not overriden before executed!
     return
   end
 
@@ -136,7 +150,7 @@ class Worker < BaseServer
   end
 
   def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @logger.warn "#{task.job_id}[#{task.id}] running."
+    @logger.debug "#{task.job_id}[#{task.id}] running."
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
@@ -239,7 +253,7 @@ class Worker::ClearResultRequest
       task_result[job_id] == [] and next if t_id_list == ALL
       task_result[job_id].reject!{|r|
         if t_id_list.include? r.task_id
-          logger.warn "#{job_id}[#{r.task_id}] deleted."
+          logger.debug "#{job_id}[#{r.task_id}] deleted."
           true
         else
           false

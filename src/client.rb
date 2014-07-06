@@ -11,8 +11,6 @@ require_relative 'common/rwlock_hash'
 
 class ResultLostError; end
 
-# FIXME: Result missing...
-#
 # TODO: Reimplement this with mixin polymorphism!
 module ClientMessageHandler include MessageService::Client::MessageHandler
   # Implement handlers here, message {:type => [type]...} will use kernel#send
@@ -31,11 +29,11 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @dispatcher.task_sent(job_id)
     @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
   rescue ThreadError # On empty task Queue
-    # FIXME The trailing ones might come before waiter returns...
-    # This is a race condition that worker finishes and recome
+    # Workers finishes and recome
     # before we fetch last result and delete job.
 
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
+    sleep 1 #Keep it from loop arrviing,
     worker_server.release(@uuid)  # It takes client id for authentication
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"

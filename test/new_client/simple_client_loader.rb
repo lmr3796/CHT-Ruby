@@ -12,7 +12,7 @@ def get_client()
 end
 def get_job(deadline=Time.now+300)
   j = Job.new
-  3.times { j.add_task Task.new('sleep',['3'])}
+  5.times { j.add_task Task.new('sleep',['1'])}
   j.deadline = deadline
   return j
 end
@@ -25,4 +25,6 @@ j2.priority=100
 c.submit_jobs(j1)
 sleep 5
 c.submit_jobs(j2)
+#c.submit_jobs([get_job, get_job, get_job])
 c.wait_all
+#Thread::stop
