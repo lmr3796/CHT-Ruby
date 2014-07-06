@@ -14,6 +14,7 @@ def get_job(deadline=Time.now+300)
   j = Job.new
   5.times { j.add_task Task.new('sleep',['1'])}
   j.deadline = deadline
+  j.priority = rand(1...20)
   return j
 end
 c = get_client
@@ -25,6 +26,13 @@ j2.priority=100
 c.submit_jobs(j1)
 sleep 5
 c.submit_jobs(j2)
-#c.submit_jobs([get_job, get_job, get_job])
+c.submit_jobs([get_job, get_job, get_job])
+sleep 10
+c.submit_jobs([get_job, get_job, get_job])
+sleep 2
+c.submit_jobs([get_job, get_job, get_job])
 c.wait_all
+meet_cnt = c.results.select{|j, rl| c.finish_time[j] < c.submitted_jobs[j][:job].deadline}.size
+p "#{meet_cnt} out of #{c.results.size} jobs met deadline."
+
 #Thread::stop

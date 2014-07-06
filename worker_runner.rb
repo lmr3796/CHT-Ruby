@@ -52,7 +52,8 @@ end
 
 # Initiate and run the worker as a DRb object
 logger = Logger.new(STDERR)
-logger.level = CHT_Configuration::LOGGER_LEVEL
+#logger.level = CHT_Configuration::LOGGER_LEVEL
+logger.level = Logger::INFO
 status_checker_druby_uri = options[:status_checker_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::STATUS_CHECKER)
 status_checker = DRbObject.new_with_uri status_checker_druby_uri
 dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)

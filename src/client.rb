@@ -31,6 +31,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   rescue ThreadError # On empty task Queue
     # Workers may finish and come back
     # before we fetch last result and delete job.
+    # FIXME: this is happening too often, very possible bug...
 
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     worker_server.validate_occupied_assignment  # It takes client id for authentication
@@ -55,7 +56,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.info "Fetching result of #{job_id}[#{task_id}] from #{worker}"
     fetched_results = worker_server.get_results(@uuid, job_id)
     @logger.info "Fetched #{fetched_results.size} result from #{worker}"
+
+    # Update the results
     add_results(fetched_results, job_id)
+    job_done(job_id) if !@results[job_id].include? nil
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
@@ -82,7 +86,7 @@ end
 
 class Client
   include ClientMessageHandler
-  attr_reader :uuid, :results
+  attr_reader :uuid, :results, :finish_time, :submitted_jobs
 
   def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
     DRb.start_service
@@ -92,6 +96,7 @@ class Client
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
     @results = {}
+    @finish_time = {}
     @logger = logger
     return
   end
@@ -210,17 +215,21 @@ class Client
       end
     end
 
-    job_done(job_id) if !@results[job_id].include? nil
     return
   end
 
   def job_done(job_id)
-    @logger.info "Job #{job_id} completed, ask to delete."
-    @rwlock.with_write_lock{@job_done[job_id] = true}
+    raise ArgumentError if !@submitted_jobs.has_key? job_id
+    return if @rwlock.with_read_lock{@job_done[job_id]}
+    finish_time = Time.now
+    @rwlock.with_write_lock do 
+      @finish_time[job_id] = finish_time
+      @job_done[job_id] = true
+    end
+    @logger.info "Job #{job_id} completed at #{@finish_time[job_id]}, ask to delete."
     delete_job(job_id)
-
-    # Make main thread run if it's sleeping in #wait....
-    Thread::main.run and @logger.debug "Notifies main thread wait to check if done" if Thread::main.stop?  end
+    Thread::main.run and @logger.debug "Notifies main thread wait to check if waiting jobs are done"
+  end
 
   def delete_job(job_id)
     @logger.info "Contact dispatcher to delete job #{job_id}"
@@ -230,7 +239,7 @@ class Client
   end
 
   def redo_task(task_id, job_id)
-    @submitted_job[job_id][:task_queue] << @submitted_job[job_id][:job].task[task_id]
+    @submitted_jobs[job_id][:task_queue] << @submitted_jobs[job_id][:job].task[task_id]
     @dispatcher.redo_task(job_id)
     return
   end
