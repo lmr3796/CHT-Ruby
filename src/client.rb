@@ -29,13 +29,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @dispatcher.task_sent(job_id)
     @logger.debug "#{job_id} popped a task to worker #{worker}"
   rescue ThreadError # On empty task Queue
-    #TODO  Maybe fix this?
+    # FIXME The trailing ones might come before waiter returns...
     # This is a race condition that worker finishes and recome
     # before we fetch last result and delete job.
-    # It is however to costive to use protocol
-    # to avoid. Simply ignores it.
 
-    # FIXME The trailing ones might come before waiter returns...
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     worker_server.release(@uuid)  # It takes client id for authentication
   rescue DRb::DRbConnError

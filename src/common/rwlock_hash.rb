@@ -32,6 +32,14 @@ class ReadWriteLockHash < Hash
     return @rwlock.with_read_lock{super(*args)}
   end
 
+  def has_key?(*args)
+    return @rwlock.with_read_lock{super(*args)}
+  end
+
+  def has_value?(*args)
+    return @rwlock.with_read_lock{super(*args)}
+  end
+
   def merge(*args)
     return @rwlock.with_read_lock{super(*args)}
   end

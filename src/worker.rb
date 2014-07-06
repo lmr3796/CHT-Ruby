@@ -55,13 +55,6 @@ class Worker < BaseServer
     return s
   end
 
-  def log_running_time(job_id, time)
-    @logger.info "Logs runtime to self"
-    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
-    @logger.info "Logs runtime to status_checker"
-    @status_checker.log_running_time job_id, time
-    return
-  end
 
   # Should only be invoked by client
   def release(client_id)
@@ -85,8 +78,16 @@ class Worker < BaseServer
     worker_available_msg = MessageService::Message.new(:worker_available,
                                                        :worker=>@name,
                                                        :job_id=>job_id)
-    @logger.debug "Send message to tell client #{client} worker I'm ready."
+    @logger.debug "Send message to tell client #{client} worker I'm ready to for job #{job_id}."
     @dispatcher.push_message(client, worker_available_msg)
+    return
+  end
+
+  def log_running_time(job_id, time)
+    @logger.info "Logs runtime to self"
+    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
+    @logger.info "Logs runtime to status_checker"
+    @status_checker.log_running_time job_id, time
     return
   end
 

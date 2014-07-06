@@ -174,6 +174,11 @@ class Dispatcher < BaseServer
     return
   end
 
+  def has_job?(job_id)
+    raise ArgumentError if job_id == nil
+    return @job_list.has_key? job_id
+  end
+
 end
 
 module Dispatcher::DispatcherJobListChangeCallBack
@@ -227,6 +232,7 @@ module Dispatcher::DispatcherClientInterface
     jobs.is_a? Array or jobs = [jobs]
     raise ArgumentError if !(jobs - @client_job_list[client_id]).empty?
     jobs.each{|job_id|@job_list.delete(job_id)}
+    # TODO: Release tail ones!!!
     @client_job_list[client_id].reject!{|job_id| jobs.include? job_id}
     @logger.debug "Current jobs: #{@job_list.keys}"
     return
