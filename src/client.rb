@@ -31,8 +31,11 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   rescue ThreadError # On empty task Queue
     #TODO  Maybe fix this?
     # This is a race condition that worker finishes and recome
-    # before we fetch result and delete job. It is however to costive to use protocol
+    # before we fetch last result and delete job.
+    # It is however to costive to use protocol
     # to avoid. Simply ignores it.
+
+    # FIXME The trailing ones might come before waiter returns...
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     worker_server.release(@uuid)  # It takes client id for authentication
   rescue DRb::DRbConnError
@@ -102,38 +105,35 @@ class Client
   end
 
   def done?(job_id_list=nil)
-    @rwlock.with_read_lock do
-      # Default value nil stands for all jobs
-      # Should not use default value parameter for obtaining this must be done using read lock
-      job_id_list = @submitted_jobs.keys if job_id_list == nil
-      raise ArgumentError if !job_id_list.is_a? Array
-      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
-      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-      @logger.debug "Checking on #{job_id_list}"
-      job_id_list.each{|j| return false unless @job_done[j]}
-    end
-    return true
-  end
-
-  def wait(job_id_list)
     raise ArgumentError if !job_id_list.is_a? Array
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-    until done?(job_id_list)
+    @logger.debug "Checking on #{job_id_list}"
+    job_id_list.each{|j| return false unless @job_done[j]}
+    return true
+  rescue ArgumentError
+    @logger.fatal job_id_list
+    raise
+  end
+
+  def wait(job_id_list=nil)
+    # Default value nil stands for all jobs
+    # Should not use default value parameter for obtaining this must be done using read lock
+    if job_id_list != nil
+      raise ArgumentError if !job_id_list.is_a? Array
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
+    end
+    until @rwlock.with_read_lock{done?(job_id_list == nil ? @submitted_jobs.keys : job_id_list)} do
       @logger.debug "There are still jobs undone, keep waiting"
       Thread::stop
     end
-    @logger.info "Jobs #{job_id_list} are done!"
+    @logger.info "Jobs#{job_id_list} are #{"all " if job_id_list == nil}done!"
     return
   end
 
   def wait_all()
-    # wait_all is a wait on all jobs.
-    until done?
-      @logger.debug "There are still jobs undone, keep waiting"
-      Thread::stop
-    end
-    @logger.info "Jobs are all done!"
+    wait
     return
   end
 
