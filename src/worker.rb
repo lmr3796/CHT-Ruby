@@ -124,7 +124,7 @@ class Worker < BaseServer
       a.job_id == task.job_id or raise 'Job ID mismatch'
       a.client_id == client_id or raise 'Client ID mismatch'
       @assignment.update{|v| v.task = task; v}
-      @logger.debug "#{task.job_id}[#{task.id}] submitted"
+      @logger.info "#{task.job_id}[#{task.id}] submitted"
       Thread::main.run
     end
     return
@@ -150,7 +150,7 @@ class Worker < BaseServer
   end
 
   def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @logger.debug "#{task.job_id}[#{task.id}] running."
+    @logger.info "#{task.job_id}[#{task.id}] running."
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
@@ -253,7 +253,7 @@ class Worker::ClearResultRequest
       task_result[job_id] == [] and next if t_id_list == ALL
       task_result[job_id].reject!{|r|
         if t_id_list.include? r.task_id
-          logger.debug "#{job_id}[#{r.task_id}] deleted."
+          logger.info "#{job_id}[#{r.task_id}] deleted."
           true
         else
           false
