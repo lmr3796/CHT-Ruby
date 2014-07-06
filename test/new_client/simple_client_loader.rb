@@ -1,9 +1,9 @@
 #! /usr/bin/env ruby
 require 'logger/colors'
 
-require_relative '../config/config.rb'
-require_relative '../src/client.rb'
-require_relative '../src/job.rb'
+require_relative '../../config/config.rb'
+require_relative '../../src/client.rb'
+require_relative '../../src/job.rb'
 
 def get_client()
   dispatcher_addr = CHT_Configuration::Address::DISPATCHER
@@ -19,5 +19,10 @@ end
 c = get_client
 c.register
 c.start
-c.submit_jobs([get_job, get_job])
+j1 = get_job
+j2 = get_job
+j2.priority=100
+c.submit_jobs(j1)
+sleep 5
+c.submit_jobs(j2)
 c.wait_all

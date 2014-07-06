@@ -103,13 +103,13 @@ class Client
 
   def done?(job_id_list=nil)
     @rwlock.with_read_lock do
-      # nil stands for all jobs
-      # Should not use default value parameter for obtaining this
-      # must be done using read lock
+      # Default value nil stands for all jobs
+      # Should not use default value parameter for obtaining this must be done using read lock
       job_id_list = @submitted_jobs.keys if job_id_list == nil
       raise ArgumentError if !job_id_list.is_a? Array
       raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
       raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
+      @logger.debug "Checking on #{job_id_list}"
       job_id_list.each{|j| return false unless @job_done[j]}
     end
     return true
@@ -119,7 +119,7 @@ class Client
     raise ArgumentError if !job_id_list.is_a? Array
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-    unless done?(job_id_list)
+    until done?(job_id_list)
       @logger.debug "There are still jobs undone, keep waiting"
       Thread::stop
     end
@@ -129,7 +129,7 @@ class Client
 
   def wait_all()
     # wait_all is a wait on all jobs.
-    unless done?
+    until done?
       @logger.debug "There are still jobs undone, keep waiting"
       Thread::stop
     end
