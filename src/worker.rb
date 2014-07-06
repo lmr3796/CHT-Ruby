@@ -228,11 +228,9 @@ class Worker::ClearResultRequest
 
   # Command Pattern
   def execute(task_result, job_id_by_client)
-    @to_delete.select do |job_id,_|
-      job_id_by_client[@client_id].include? job_id
-    end.each do |job_id, task_id_list|
+    @to_delete.select{|job_id,_|job_id_by_client[@client_id].include? job_id}.each do |job_id, task_id_list|
       task_result[job_id] == [] and next if task_id_list == ALL
-      task_result[job_id].reject!{|r| task_id_list.include? r} # TODO Higher efficiency?
+      task_result[job_id].reject!{|r| task_id_list.include? r.task_id} # TODO Higher efficiency?
     end
   end
 end
