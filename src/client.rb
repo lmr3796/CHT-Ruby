@@ -29,12 +29,12 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @dispatcher.task_sent(job_id)
     @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
   rescue ThreadError # On empty task Queue
-    # Workers finishes and recome
+    # Workers may finish and come back
     # before we fetch last result and delete job.
 
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
-    sleep 1 #Keep it from loop arrviing,
-    worker_server.release(@uuid)  # It takes client id for authentication
+    worker_server.validate_occupied_assignment  # It takes client id for authentication
+    sleep 1 # Keep it from loop arrviing, debug use
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
     #TODO some recovery??
