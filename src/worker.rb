@@ -113,6 +113,7 @@ class Worker < BaseServer
       client_id = nil
       Thread.stop
       @lock.synchronize do  # Worker is dedicated
+        self.status = STATUS::BUSY
         task, client_id = [assignment.task, assignment.client_id]
         result = run_task(task)
         @result_manager.add_result(client_id, result)
@@ -121,12 +122,11 @@ class Worker < BaseServer
                                                                       :worker => @name,
                                                                       :job_id => task.job_id,
                                                                       :task_id => task.id))
-      @status = STATUS::AVAILABLE
+      self.status = STATUS::AVAILABLE
     end
   end
 
   def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @status_checker.worker_running(@name)
     @logger.info "Running task of job #{task.job_id}"
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
