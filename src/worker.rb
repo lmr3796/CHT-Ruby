@@ -33,7 +33,7 @@ class Worker < BaseServer
     @id = SecureRandom::uuid()
     @name = name
     @lock = Mutex.new
-    @status = STATUS::AVAILABLE
+    @status = STATUS::UNKNOWN
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
     @dispatcher = arg[:dispatcher]
@@ -46,31 +46,35 @@ class Worker < BaseServer
     @logger.info "Notifies status checker for coming"
     @status_checker.register_worker @name
     return
+  rescue => e
+    @logger.error "Error registering worker"
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
   end
 
   def status=(s)
     raise ArgumentError if !STATUS::constants.include? s
-    @logger.info "Worker status set to #{s}"
+    raise ArgumentError if s == STATUS::DOWN || s == STATUS::UNKNOWN # Insane to mark self as DOWN...
     @status = s
+    @logger.info "Worker status set to #{s}"
+    @status_checker.mark_worker_status(@name, @status)
+    @logger.info "Notified status checker for worker status set to #{s}"
+
+    # Refactor this to a callback table if necessary; currently not.
+    @dispatcher.on_worker_available(@name) if s == STATUS::AVAILABLE
     return s
   end
 
-
-  # Should only be invoked by client
-  def release(client_id)
-    if @assignment.value.client_id != client_id
-      @logger.error("Invalid caller client: #{client_id}")
-      return false 
-    end
-    @status_checker.release_worker(@name, false)  # For preventing it from looping
-    return true
+  def assignment
+    return @assignment.value
   end
 
-  def assign_job(assignment)
-    assignment.is_a? JobAssignment or raise ArgumentError
-    @assignment.update{|_| assignment} 
+  def assignment=(a)
+    a.is_a? JobAssignment or raise ArgumentError
+    @assignment.update{|_| a}
+    @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+
     self.status = STATUS::OCCUPIED
-    @logger.debug "Assigned with job:#{assignment.job_id}, client:#{assignment.client_id}"
 
     # Send message to client and tell ready
     client = @assignment.value.client_id
@@ -83,19 +87,20 @@ class Worker < BaseServer
     return
   end
 
-  def log_running_time(job_id, time)
-    @logger.info "Logs runtime to self"
-    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
-    @logger.info "Logs runtime to status_checker"
-    @status_checker.log_running_time job_id, time
-    return
+  def release(client_id) # Should only be invoked by client
+    if assignment.client_id != client_id
+      @logger.error("Invalid caller client: #{client_id}")
+      return false
+    end
+    self.status = STATUS::AVAILABLE
+    return true
   end
 
   def submit_task(task, client_id)
     task.is_a? Task or raise ArgumentError
     @lock.synchronize do
-      @assignment.value.job_id == task.job_id or raise 'Job ID mismatch'
-      @assignment.value.client_id == client_id or raise 'Client ID mismatch'
+      assignment.job_id == task.job_id or raise 'Job ID mismatch'
+      assignment.client_id == client_id or raise 'Client ID mismatch'
       @assignment.update{|v| v.task = task; v}
       Thread::main.run
     end
@@ -104,20 +109,19 @@ class Worker < BaseServer
 
   def start
     loop do
-      Thread.stop if @task_to_run == nil
-      $stderr.puts "Awake"
-      task, client_id = [@assignment.value.task, @assignment.value.client_id]
+      task = nil
+      client_id = nil
+      Thread.stop
       @lock.synchronize do  # Worker is dedicated
+        task, client_id = [assignment.task, assignment.client_id]
         result = run_task(task)
-        @status = STATUS::AVAILABLE
         @result_manager.add_result(client_id, result)
       end
       @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
                                                                       :worker => @name,
                                                                       :job_id => task.job_id,
                                                                       :task_id => task.id))
-      # TODO: Convert this call into message?
-      @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
+      @status = STATUS::AVAILABLE
     end
   end
 
@@ -157,6 +161,14 @@ class Worker < BaseServer
   def clear_result(clear_request) # Delegator
     clear_request.is_a? Worker::ClearResultRequest or raise ArgumentError
     return @result_manager.clear_result(clear_request)
+  end
+
+  def log_running_time(job_id, time)
+    @logger.info "Logs runtime to self"
+    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
+    @logger.info "Logs runtime to status_checker"
+    @status_checker.log_running_time job_id, time
+    return
   end
 end
 

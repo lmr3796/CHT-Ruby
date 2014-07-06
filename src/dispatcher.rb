@@ -146,6 +146,7 @@ class Dispatcher < BaseServer
   end
 
   def on_reschedule(schedule)
+    @logger.debug "Ask status checker to recollect status"
     @status_checker.collect_status
     return
   end
@@ -154,7 +155,7 @@ class Dispatcher < BaseServer
     @logger.debug "Worker #{worker} will be assigned to #{job_id}"
     job_assignment = [job_id, @client_job_list.get_client_by_job(job_id)]
     job_assignment = Worker::JobAssignment.new(job_id, @client_job_list.get_client_by_job(job_id))
-    DRbObject.new_with_uri(worker_uri(worker)).assign_job(job_assignment) # May have to clean this ??
+    DRbObject.new_with_uri(worker_uri(worker)).assignment = job_assignment # May have to clean this ??
     return
   end
 

@@ -14,24 +14,28 @@ class StatusChecker < BaseServer
     @lock.with_read_lock{return Hash[@job_running_time]}
     return
   end
+
   def worker_avg_running_time()
     @lock.with_read_lock{return Hash[@worker_avg_running_time]}
     return
   end
+
   def worker_status
     @lock.with_read_lock{return Hash[@worker_status_table]}
     return
   end
+
   def worker_uri(worker)
-    @worker_table.has_key? worker or raise "No worker #{worker} found"
-    return @worker_table[worker].instance_variable_get("@uri")
+    @worker_server_table.has_key? worker or raise ArgumentError, "No worker #{worker} found"
+    return @worker_server_table[worker].instance_variable_get("@uri")
   end
+
   def initialize(worker_table={},arg={})
     super arg[:logger]
     # TODO: make up a worker table
     @lock = ReadWriteLock.new
     @job_running_time = ReadWriteLockHash.new
-    @worker_table = Hash[worker_table]
+    @worker_server_table = Hash[worker_table]
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
@@ -40,14 +44,19 @@ class StatusChecker < BaseServer
       Thread.new do
         EventMachine.run do
           EventMachine.add_periodic_timer(arg[:update_period]) do
-            collect_status
-            @logger.info 'Asked to reschedule'
+            @logger.info "Periodically updating status"
             begin
-              @dispatcher.reschedule
+              collect_status
             rescue => e
+              @logger.error "Error collecting status"
+              @logger.error e.message
+              @logger.error e.backtrace.join("\n")
+            end
+            begin
+              @logger.info 'Asked to reschedule'
+              @dispatcher.reschedule
+            rescue DRbConnError=> e
               @logger.error "Error contacting dispatcher for reschedule"
-              @logger.debug e.message
-              @logger.debug e.backtrace.join("\n")
             end
           end
         end
@@ -56,15 +65,15 @@ class StatusChecker < BaseServer
     return
   end
 
-  def collect_status(workers=@worker_table.keys)
+  def collect_status(workers=@worker_server_table.keys)
     @logger.info "Collecting status"
     @lock.with_write_lock do
       workers.each do |w|
         status = nil
         avg_time = nil
         begin
-          status = @worker_table[w].status
-          avg_time = @worker_table[w].avg_running_time
+          status = @worker_server_table[w].status
+          avg_time = @worker_server_table[w].avg_running_time
         rescue => e
           @logger.warn "Exception #{e} when checking status of worker #{w}"
           @logger.debug e.to_s
@@ -76,14 +85,8 @@ class StatusChecker < BaseServer
         end
       end
     end
-    workers.select{|w| @worker_status_table[w] == Worker::STATUS::AVAILABLE}.each do |w|
-      begin
-        @dispatcher.on_worker_available w
-      rescue DRb::DRbConnError => e
-        @logger.error "Error reaching dispatcher"
-        @logger.error e.backtrace.join("\n")
-      end
-    end
+
+    @logger.info "Successfully collected status"
     return
   end
 
@@ -96,6 +99,7 @@ class StatusChecker < BaseServer
     end
     return
   end
+
   def delete_job(job_id_list)
     raise ArgumentError if job_id_list == nil
     job_id_list.is_a?Array or job_id_list = [job_id_list]
@@ -118,43 +122,32 @@ end
 
 module StatusChecker::WorkerInterface
   def register_worker(worker)
-    @lock.with_write_lock do
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
-      @logger.info "Worker: #{worker} registered; set to AVAILABLE"
+    begin
+      @worker_server_table[worker].status = Worker::STATUS::AVAILABLE
+      @logger.info "Worker: #{worker} registered."
+      @logger.info 'Asked to reschedule'
+    rescue DRb::DRbConnError => e
+      @logger.error "Error reaching the registering worker #{worker}"
+      @logger.debug e.message
+      @logger.debug e.backtrace.join("\n")
+      raise "Can't reach worker, is your DRb service running?"
     end
-    @logger.info 'Asked to reschedule'
     begin
       @dispatcher.reschedule
-    rescue => e
+      @dispatcher.on_worker_available(worker)
+    rescue DRbConnError => e
       @logger.error "Error reaching dispatcher"
       @logger.debug e.message
       @logger.debug e.backtrace.join("\n")
     end
-    @dispatcher.on_worker_available(worker)
     return
   end
 
-  def release_worker(worker, notify=true)
+  def mark_worker_status(worker, status)
+    raise ArgumentError if !Worker::STATUS::constants.include? status
     @lock.with_write_lock do
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::AVAILABLE
-      @logger.info "Released worker: #{worker}"
-    end
-    @dispatcher.on_worker_available(worker) if notify
-    return
-  end
- 
-  def occupy_worker(worker)
-    @lock.with_write_lock do
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::OCCUPIED
-      @logger.info "Occupied worker: #{worker}"
-    end
-    return
-  end
-
-  def worker_running(worker)
-    @lock.with_write_lock do
-      @worker_status_table[worker] = @worker_table[worker].status = Worker::STATUS::BUSY
-      @logger.info "Mark running worker: #{worker}"
+      @worker_status_table[worker] = status
+      @logger.info "Mark worker #{worker} as #{status}"
     end
     return
   end
@@ -163,4 +156,5 @@ module StatusChecker::WorkerInterface
     release_worker(worker)
     return
   end
+  private :on_task_done
 end
