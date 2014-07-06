@@ -83,7 +83,8 @@ class Dispatcher::ScheduleManager
       job_running_time = @status_checker.job_running_time
       worker_avg_running_time = @status_checker.worker_avg_running_time
       cloned_job_list = Hash.new.merge(@job_list)
-      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN}
+      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
+
       # Schedule result:  {job_id => [worker1, worker2...]}
       @job_worker_table = @decision_maker.schedule_job(
         cloned_job_list,
@@ -146,6 +147,7 @@ class Dispatcher < BaseServer
   end
 
   def on_reschedule(schedule)
+    @logger.debug "Ask status checker to recollect status"
     @status_checker.collect_status
     return
   end
@@ -154,7 +156,7 @@ class Dispatcher < BaseServer
     @logger.debug "Worker #{worker} will be assigned to #{job_id}"
     job_assignment = [job_id, @client_job_list.get_client_by_job(job_id)]
     job_assignment = Worker::JobAssignment.new(job_id, @client_job_list.get_client_by_job(job_id))
-    DRbObject.new_with_uri(worker_uri(worker)).assign_job(job_assignment) # May have to clean this ??
+    DRbObject.new_with_uri(worker_uri(worker)).assignment = job_assignment # May have to clean this ??
     return
   end
 
@@ -174,11 +176,18 @@ class Dispatcher < BaseServer
     return
   end
 
+  def has_job?(job_id)
+    raise ArgumentError if job_id == nil
+    return @job_list.has_key? job_id
+  end
+
 end
 
 module Dispatcher::DispatcherJobListChangeCallBack
   def on_job_submitted(_)
     @logger.debug "Current jobs: #{@job_list.keys}"
+    # Validate zombie assignment occupations on job_list_change
+    @status_checker.release_zombie_occupied_worker
     return
   end
 
@@ -187,9 +196,12 @@ module Dispatcher::DispatcherJobListChangeCallBack
     # Release nodes first
     change_list.each do |job_id|
       @logger.info "Unregistering #{job_id} from status checker"
-      @status_checker.delete_job job_id # Can't make this an observer in status checker for dependency
+      @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
       @logger.info "Unregistering #{job_id} from status checker"
     end
+    # Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
+    @status_checker.release_zombie_occupied_worker
+    # P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
     return
   end
 end
@@ -227,6 +239,7 @@ module Dispatcher::DispatcherClientInterface
     jobs.is_a? Array or jobs = [jobs]
     raise ArgumentError if !(jobs - @client_job_list[client_id]).empty?
     jobs.each{|job_id|@job_list.delete(job_id)}
+    # TODO: Release tail ones!!!
     @client_job_list[client_id].reject!{|job_id| jobs.include? job_id}
     @logger.debug "Current jobs: #{@job_list.keys}"
     return

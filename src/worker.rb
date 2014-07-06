@@ -32,8 +32,8 @@ class Worker < BaseServer
     super arg[:logger]
     @id = SecureRandom::uuid()
     @name = name
-    @lock = Mutex.new
-    @status = STATUS::AVAILABLE
+    @mutex = Mutex.new
+    @status = STATUS::UNKNOWN
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
     @dispatcher = arg[:dispatcher]
@@ -43,59 +43,88 @@ class Worker < BaseServer
   end
 
   def register()
-    @logger.info "Notifies status checker for coming"
+    @logger.debug "Notifies status checker for coming"
     @status_checker.register_worker @name
     return
+  rescue => e
+    @logger.error "Error registering worker"
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
   end
 
   def status=(s)
     raise ArgumentError if !STATUS::constants.include? s
-    @logger.info "Worker status set to #{s}"
+    raise ArgumentError if s == STATUS::DOWN || s == STATUS::UNKNOWN # Insane to mark self as DOWN...
     @status = s
+    @logger.info "Worker status set to #{s}"
+    @status_checker.mark_worker_status(@name, @status)
+    @logger.debug "Notified status checker for worker status set to #{s}"
+
+    # Refactor this to a callback table if necessary; currently not.
+    @dispatcher.on_worker_available(@name) if s == STATUS::AVAILABLE
     return s
   end
 
-  def log_running_time(job_id, time)
-    @logger.info "Logs runtime to self"
-    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
-    @logger.info "Logs runtime to status_checker"
-    @status_checker.log_running_time job_id, time
+  def assignment
+    return @assignment.value
+  end
+
+  # Should only be invoked while on_worker_available, so there 
+  # shouldn't be any race condition here.
+  def assignment=(a)
+    a.is_a? JobAssignment or raise ArgumentError
+    @assignment.update{|_| a}
+    @logger.info "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+    self.status = STATUS::OCCUPIED
+    tell_client_ready
     return
   end
 
-  # Should only be invoked by client
-  def release(client_id)
-    if @assignment.value.client_id != client_id
-      @logger.error("Invalid caller client: #{client_id}")
-      return false 
-    end
-    @status_checker.release_worker(@name, false)  # For preventing it from looping
-    return true
-  end
-
-  def assign_job(assignment)
-    assignment.is_a? JobAssignment or raise ArgumentError
-    @assignment.update{|_| assignment} 
-    self.status = STATUS::OCCUPIED
-    @logger.debug "Assigned with job:#{assignment.job_id}, client:#{assignment.client_id}"
-
+  def tell_client_ready
     # Send message to client and tell ready
-    client = @assignment.value.client_id
-    job_id = @assignment.value.job_id
+    a = self.assignment
+    client = a.client_id
+    job_id = a.job_id
     worker_available_msg = MessageService::Message.new(:worker_available,
                                                        :worker=>@name,
                                                        :job_id=>job_id)
-    @logger.debug "Send message to tell client #{client} worker I'm ready."
+    @logger.debug "Send message to tell client #{client} worker I'm ready to for job #{job_id}."
     @dispatcher.push_message(client, worker_available_msg)
     return
   end
 
+  def release(client_id)            # Should only be invoked by client
+    if self.assignment.client_id != client_id
+      @logger.error("Invalid caller client: #{client_id}")
+      return false
+    end
+    self.status = STATUS::AVAILABLE
+    return true
+  end
+
+  def awake                         # AVAILABLE ONLY
+    @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
+    @dispatcher.on_worker_available(@name)
+  end
+  def validate_occupied_assignment  # OCCUPIED ONLY
+    @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
+    valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
+    
+    return true if valid
+
+    @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+    self.status = STATUS::AVAILABLE 
+    return false
+  end
+
   def submit_task(task, client_id)
     task.is_a? Task or raise ArgumentError
-    @lock.synchronize do
-      @assignment.value.job_id == task.job_id or raise 'Job ID mismatch'
-      @assignment.value.client_id == client_id or raise 'Client ID mismatch'
+    @mutex.synchronize do
+      a = self.assignment
+      a.job_id == task.job_id or raise 'Job ID mismatch'
+      a.client_id == client_id or raise 'Client ID mismatch'
       @assignment.update{|v| v.task = task; v}
+      @logger.debug "#{task.job_id}[#{task.id}] submitted"
       Thread::main.run
     end
     return
@@ -103,30 +132,29 @@ class Worker < BaseServer
 
   def start
     loop do
-      Thread.stop if @task_to_run == nil
-      $stderr.puts "Awake"
-      task, client_id = [@assignment.value.task, @assignment.value.client_id]
-      @lock.synchronize do  # Worker is dedicated
+      task = nil
+      client_id = nil
+      Thread.stop
+      @mutex.synchronize do  # Worker is dedicated
+        self.status = STATUS::BUSY
+        task, client_id = [self.assignment.task, self.assignment.client_id]
         result = run_task(task)
-        @status = STATUS::AVAILABLE
         @result_manager.add_result(client_id, result)
       end
       @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
                                                                       :worker => @name,
                                                                       :job_id => task.job_id,
                                                                       :task_id => task.id))
-      # TODO: Convert this call into message?
-      @status_checker.on_task_done(@name, task.id, task.job_id, client_id)
+      self.status = STATUS::AVAILABLE
     end
   end
 
   def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @status_checker.worker_running(@name)
-    @logger.info "Running task of job #{task.job_id}"
+    @logger.debug "#{task.job_id}[#{task.id}] running."
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
     @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
-    @logger.info "Finished task of job #{task.job_id} in #{result.run_time} seconds"
+    @logger.debug "Finished task of job #{task.job_id} in #{result.run_time} seconds"
     return result
   end
 
@@ -155,7 +183,13 @@ class Worker < BaseServer
 
   def clear_result(clear_request) # Delegator
     clear_request.is_a? Worker::ClearResultRequest or raise ArgumentError
-    return @result_manager.clear_result(clear_request)
+    return @result_manager.clear_result(clear_request, @logger)
+  end
+
+  def log_running_time(job_id, time)
+    @avg_running_time = @avg_running_time == nil ? time : @avg_running_time * (1-LEARNING_RATE) + time * LEARNING_RATE
+    @status_checker.log_running_time(job_id, time)
+    return
   end
 end
 
@@ -186,10 +220,10 @@ class Worker::TaskResultManager
     return
   end
 
-  def clear_result(clear_request)
+  def clear_result(clear_request, logger)
     raise ArgumentError if !clear_request.is_a? Worker::ClearResultRequest
     @rwlock.with_write_lock do
-      clear_request.execute(@task_result, @job_id_by_client)
+      clear_request.execute(@task_result, @job_id_by_client, logger)
     end
     return
   end
@@ -214,12 +248,17 @@ class Worker::ClearResultRequest
   end
 
   # Command Pattern
-  def execute(task_result, job_id_by_client)
-    @to_delete.select do |job_id,_|
-      job_id_by_client[@client_id].include? job_id
-    end.each do |job_id, task_id_list|
-      task_result[job_id] == [] and next if task_id_list == ALL
-      task_result[job_id].reject!{|r| task_id_list.include? r} # TODO Higher efficiency?
+  def execute(task_result, job_id_by_client, logger)
+    @to_delete.select{|job_id,_|job_id_by_client[@client_id].include? job_id}.each do |job_id, t_id_list|
+      task_result[job_id] == [] and next if t_id_list == ALL
+      task_result[job_id].reject!{|r|
+        if t_id_list.include? r.task_id
+          logger.debug "#{job_id}[#{r.task_id}] deleted."
+          true
+        else
+          false
+        end
+      } # TODO Higher efficiency?
     end
   end
 end
