@@ -19,7 +19,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
   def on_worker_available(m)
     m.is_a? MessageService::Message or raise ArgumentError
-    @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
+    @logger.info "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
     job_id = m.content[:job_id]
     worker = m.content[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
@@ -34,7 +34,8 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     # FIXME: this is happening too often, very possible bug...
 
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
-    worker_server.validate_occupied_assignment  # It takes client id for authentication
+    @dispatcher.reschedule
+    worker_server.validate_occupied_assignment and worker_server.release(@uuid) # It takes client id for authentication
     sleep 1 # Keep it from loop arrviing, debug use
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
@@ -59,7 +60,6 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     # Update the results
     add_results(fetched_results, job_id)
-    job_done(job_id) if !@results[job_id].include? nil
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
@@ -71,6 +71,9 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     clear_request = Worker::ClearResultRequest.new(@uuid, to_delete)
     worker_server.clear_result(clear_request)
     @logger.info "Deleted obtained results of #{job_id} on worker #{worker}"
+
+
+    job_done(job_id) if !@results[job_id].include? nil
 
     # Notified to retrieve but not found, mark as lost
     raise ResultLostError if @results[job_id][task_id] == nil
