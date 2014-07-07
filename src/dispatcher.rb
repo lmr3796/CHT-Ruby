@@ -187,8 +187,8 @@ end
 module Dispatcher::DispatcherJobListChangeCallBack
   def on_job_submitted(_)
     @logger.debug "Current jobs: #{@job_list.keys}"
-    # Validate zombie assignment occupations on job_list_change
-    @status_checker.release_zombie_occupied_worker
+    ## Validate zombie assignment occupations on job_list_change
+    #@status_checker.release_zombie_occupied_worker
     return
   end
 
@@ -200,9 +200,9 @@ module Dispatcher::DispatcherJobListChangeCallBack
       @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
       @logger.info "Unregistering #{job_id} from status checker"
     end
-    # Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
-    @status_checker.release_zombie_occupied_worker
-    # P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
+    ## Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
+    #@status_checker.release_zombie_occupied_worker
+    ## P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
     return
   end
 end
