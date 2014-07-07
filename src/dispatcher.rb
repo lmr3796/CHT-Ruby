@@ -107,8 +107,8 @@ class Dispatcher::ScheduleManager
 
   # Observer callbacks
   def on_job_submitted(change_list)
+    @status_checker.register_job(change_list) # Must make up entry before rescheduling...
     schedule_job
-    @status_checker.register_job(change_list)
     return
   end
 
@@ -159,6 +159,7 @@ class Dispatcher < BaseServer
     DRbObject.new_with_uri(worker_uri(worker)).assignment = job_assignment # May have to clean this ??
     return
   end
+  private :assign_worker_to_job
 
   # General APIs
   def reschedule()
