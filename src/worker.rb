@@ -1,6 +1,7 @@
 require 'open3'
 require 'logger/colors'
 require 'time'
+require 'timeout'
 require 'thread'
 require 'securerandom'
 
@@ -11,8 +12,10 @@ require_relative 'job'
 require_relative 'message_service'
 
 class Worker < BaseServer; end
+class Worker::WorkerStateCorruptError < RuntimeError; end
+class Worker::InvalidAssignmentError < RuntimeError; end
 
-Worker::JobAssignment = Struct.new(:job_id, :client_id, :task)
+Worker::JobAssignment = Struct.new(:job_id, :client_id)
 
 module Worker::STATUS
   DOWN       = :DOWN
@@ -27,6 +30,7 @@ class Worker < BaseServer
   attr_writer :status_checker
 
   LEARNING_RATE = 0.2         # Rate of updating avg exec time
+  DEFAULT_TIMEOUT = 5
 
   def initialize(name, arg={})
     super arg[:logger]
@@ -38,7 +42,9 @@ class Worker < BaseServer
     @result_manager = TaskResultManager.new
     @dispatcher = arg[:dispatcher]
     @status_checker = arg[:status_checker]
-    @assignment = Atomic.new(JobAssignment.new)
+    @assignment = Atomic.new(JobAssignment.new) # Real task assignment should not depend on this, this is only for validating submission
+    @task_ready = ConditionVariable.new
+    @occupied = ConditionVariable.new
     return
   end
 
@@ -61,7 +67,12 @@ class Worker < BaseServer
     @logger.debug "Notified status checker for worker status set to #{s}"
 
     # Refactor this to a callback table if necessary; currently not.
-    @dispatcher.on_worker_available(@name) if s == STATUS::AVAILABLE
+    case s
+    when STATUS::OCCUPIED
+      @occupied.signal
+    when STATUS::AVAILABLE
+      @dispatcher.on_worker_available(@name)
+    end
     return s
   end
 
@@ -74,22 +85,25 @@ class Worker < BaseServer
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
     @assignment.update{|_| a}
-    @logger.info "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+    @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+
+    # FIXME: State is corrupted by the following 2 lines
+    # 1. BUSY state gets corrupted by force writing state
+    # 2. main.run corrupts waiting of the condition variable @task_ready
     self.status = STATUS::OCCUPIED
-    tell_client_ready
+    Thread::main.run
     return
   end
 
-  def tell_client_ready
+  def tell_client_ready(client_id, job_id)
     # Send message to client and tell ready
-    a = self.assignment
-    client = a.client_id
-    job_id = a.job_id
+    raise ArgumentError if client_id == nil
+    raise ArgumentError if job_id == nil
     worker_available_msg = MessageService::Message.new(:worker_available,
                                                        :worker=>@name,
                                                        :job_id=>job_id)
-    @logger.debug "Send message to tell client #{client} worker I'm ready to for job #{job_id}."
-    @dispatcher.push_message(client, worker_available_msg)
+    @logger.debug "Send message to tell client #{client_id} worker I'm ready to for job #{job_id}."
+    @dispatcher.push_message(client_id, worker_available_msg)
     return
   end
 
@@ -104,57 +118,98 @@ class Worker < BaseServer
 
   def awake                         # AVAILABLE ONLY
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
+    @logger.debug "Awoken to fetch new assignment"
     @dispatcher.on_worker_available(@name)
   end
+
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
+    @logger.debug "Validating assignment"
     valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
-    
-    return true if valid
 
-    @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
-    self.status = STATUS::AVAILABLE 
-    return false
+    if valid
+      @logger.debug "Assignment of job #{self.assignment.job_id} valid."
+    else
+      Thread::main.raise InvalidAssignmentError
+    end
+
+    return valid
   end
 
   def submit_task(task, client_id)
-    task.is_a? Task or raise ArgumentError
+    raise ArgumentError if !task.is_a? Task
+    raise ArgumentError if self.status != STATUS::OCCUPIED
     @mutex.synchronize do
       a = self.assignment
-      a.job_id == task.job_id or raise 'Job ID mismatch'
-      a.client_id == client_id or raise 'Client ID mismatch'
-      @assignment.update{|v| v.task = task; v}
-      @logger.info "#{task.job_id}[#{task.id}] submitted"
-      Thread::main.run
+      @logger.warn "Job ID mismatch: assigned #{a.job_id} but submitted #{task.job_id}" and return false if a.job_id != task.job_id
+      @logger.warn "Client ID mismatch: assigned #{a.client_id} but #{client_id} is submitting" and return false if a.client_id != client_id
+      Thread::main[:task] = task
+      Thread::main[:client_id] = client_id
+      Thread::main.raise 'State Corrupted' and raise 'State Corrupted' if !Thread::main.stop?
+      @logger.debug "#{task.job_id}[#{task.id}] submitted"
+      @task_ready.signal
+      return true
     end
-    return
   end
 
   def start
     loop do
-      task = nil
-      client_id = nil
-      Thread.stop
+      Thread::stop if @status == STATUS::AVAILABLE
       @mutex.synchronize do  # Worker is dedicated
-        self.status = STATUS::BUSY
-        task, client_id = [self.assignment.task, self.assignment.client_id]
-        result = run_task(task)
-        @result_manager.add_result(client_id, result)
+        begin
+          #@occupied.wait(@mutex) if @status != STATUS::OCCUPIED
+
+          # Must be OCCUPIED here and client waits for client to submit a task
+          raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
+
+          a = self.assignment
+          tell_client_ready(a.client_id, a.job_id)
+          #Timeout::timeout(DEFAULT_TIMEOUT)  #TODO: Maybe enable this in production....
+          @task_ready.wait(@mutex)      # FIXME: might get waken by #assignment=
+
+          # FIXME: The following error WILL occur.
+          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
+          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
+
+          # Task submitted. Run!!!
+          self.status = STATUS::BUSY    # FIXME: might get overwrite by #assignment=
+          task, client_id = [Thread.current[:task], Thread.current[:client_id]]
+          Thread.current[:task] = nil
+          Thread.current[:client_id] = nil
+          result = run_task(task)
+          @result_manager.add_result(client_id, result)
+          @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+                                                                          :worker => @name,
+                                                                          :job_id => task.job_id,
+                                                                          :task_id => task.id))
+          raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
+
+        rescue InvalidAssignmentError
+          @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+        rescue WorkerStateCorruptError => e
+          @logger.fatal e.message
+          @logger.fatal e.backtrace.join("\n")
+          exit(false) # FIXME: Remove this after fixing state corrupt bug; debug use!!!
+        rescue Timeout::Error
+          @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
+          next
+        rescue => e
+          @logger.error e.message
+          @logger.error e.backtrace.join("\n")
+          exit(false) # FIXME: Remove this after fixing state corrupt bug; debug use!!!
+        ensure
+          self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
+        end
       end
-      @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
-                                                                      :worker => @name,
-                                                                      :job_id => task.job_id,
-                                                                      :task_id => task.id))
-      self.status = STATUS::AVAILABLE
     end
   end
 
-  def run_task(task) task.is_a? Task or raise 'Invalid task to run'
-    @logger.info "#{task.job_id}[#{task.id}] running."
+  def run_task(task)
+    @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
+    @logger.debug "#{task.job_id}[#{task.id}] running."
     result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
-    @logger.debug result.inspect
     log_running_time(task.job_id, result.run_time)
-    @logger.info "Finished task of job #{task.job_id} in #{result.run_time} seconds"
+    @logger.debug "Finished #{task.job_id}[#{task.id}] in #{result.run_time} seconds"
     return result
   end
 
@@ -169,7 +224,7 @@ class Worker < BaseServer
       :status => wait_thr.value,
       :run_time => Time.now - start
     }
-    @logger.debug "`#{command}#{args.join(' ')}` done in #{result[:run_time]} seconds"
+    @logger.debug "`#{command} #{args.join(' ')}` done in #{result[:run_time]} seconds"
     stdin.close
     stdout.close
     stderr.close
@@ -253,7 +308,7 @@ class Worker::ClearResultRequest
       task_result[job_id] == [] and next if t_id_list == ALL
       task_result[job_id].reject!{|r|
         if t_id_list.include? r.task_id
-          logger.info "#{job_id}[#{r.task_id}] deleted."
+          logger.debug "#{job_id}[#{r.task_id}] deleted."
           true
         else
           false

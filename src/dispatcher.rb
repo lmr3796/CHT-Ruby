@@ -99,7 +99,7 @@ class Dispatcher::ScheduleManager
         workers.each{|worker| @worker_job_table[worker] = job_id}
       end
     end
-    @on_schedule_callback.call(@job_worker_table) if @on_schedule_callback.respond_to? :call
+    @on_schedule_callback.call if @on_schedule_callback.respond_to? :call
     @logger.info 'Updated schedule successfully'
     @logger.debug "Current schedule: #{@job_worker_table}"
     return
@@ -146,7 +146,7 @@ class Dispatcher < BaseServer
     return
   end
 
-  def on_reschedule(schedule)
+  def on_reschedule
     @logger.debug "Ask status checker to recollect status"
     @status_checker.collect_status
     return
