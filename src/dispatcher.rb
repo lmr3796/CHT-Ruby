@@ -265,16 +265,17 @@ module Dispatcher::DispatcherClientInterface
   end
 end
 
-module Dispatcher::DispatcherWorkerInterface
-  # Worker APIs
+module Dispatcher::DispatcherWorkerInterface 
+  # Returns next job assignment
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
+    next_job_assigned = nil
     @resource_mutex.synchronize do
       next_job_assigned = @schedule_manager.worker_job_table[worker]
-      return if next_job_assigned == nil
+      next if next_job_assigned == nil
       assign_worker_to_job(worker, next_job_assigned)
     end
-    return
+    return next_job_assigned
   end
 end
 
