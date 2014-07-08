@@ -210,7 +210,7 @@ class Client
   end
 
   def add_results(results, job_id)
-    results.is_a? Array or raise ArgumentError
+    results = [results] if !results.is_a?(Array)
     results.each do |r|
       r.is_a? TaskResult or raise ArgumentError, 'Invalid TaskResult(s)'
       r.job_id == job_id or raise ArgumentError, 'Job id mismatched'

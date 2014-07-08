@@ -229,7 +229,7 @@ class Worker < BaseServer
   end
 
   def run_cmd(command, *args)
-    @logger.debug "Running `#{command} #{args.join(' ')}`"
+    @logger.info "Running `#{command} #{args.join(' ')}`"
     start = Time.now
     # Should use wait_thr instead of $?; $? not working when using DRb
     stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
