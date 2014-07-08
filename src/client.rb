@@ -36,7 +36,6 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   rescue ThreadError # On empty task Queue
     # Workers may finish and come back
     # before we fetch last result and delete job.
-    # FIXME: this is happening too often, very possible bug...
 
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
     @dispatcher.reschedule
