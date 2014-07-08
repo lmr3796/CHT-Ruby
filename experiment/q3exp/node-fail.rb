@@ -21,7 +21,7 @@ if deadlines.size == 0 or deadlines.select{|d| d == nil or !d.is_a? Time}.size >
   exit(-1)
 end
 
-workload = WorkloadParser::workload_from_file file 
+workload = WorkloadParser::workload_from_file(file)
 jobs = workload.map do |i|
   j = Job.new
   j.priority = DEFAULT_PRIORITY

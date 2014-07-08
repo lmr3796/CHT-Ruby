@@ -64,7 +64,7 @@ module SchedulingAlgorithm
         if job.task_running_time_on_worker[worker_id] != nil
           estimated_running_time = job.task_running_time_on_worker[worker_id]
           @logger.info "Estimate run time using provided runtime = #{estimated_running_time} sec."
-        elsif job.avg_task_running_time != nil && job.avg_task_running_time > 0 
+        elsif job.avg_task_running_time != nil && job.avg_task_running_time > 0
           @logger.info "Estimate run time using average task execution time = #{job.avg_task_running_time} sec."
           estimated_running_time = job.avg_task_running_time
         else
