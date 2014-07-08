@@ -197,6 +197,7 @@ module MessageService
           @logger.error "Error processing message #{m.inspect}"
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
+          system('killall ruby')  # FIXME: remove me!!! debug use!!!!
         end
       end
     end

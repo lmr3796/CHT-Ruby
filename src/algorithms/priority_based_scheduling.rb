@@ -9,7 +9,7 @@ module SchedulingAlgorithm
       # worker_status: {worker_id => status}
       # current_schedule: {job_id => [worker_id, ...]}
       # Return: {job_id => [worker_id, ...]}
-      # Concept: 
+      # Concept:
       # Priority represented by smaller number is of higher priority.
       job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys

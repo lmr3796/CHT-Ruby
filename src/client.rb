@@ -19,26 +19,35 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
   def on_worker_available(m)
     m.is_a? MessageService::Message or raise ArgumentError
-    @logger.debug "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
+    @logger.info "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
     job_id = m.content[:job_id]
     worker = m.content[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
 
-    worker_server.submit_task(task, @uuid)
-    @dispatcher.task_sent(job_id)
-    @logger.debug "#{job_id} popped a task to worker #{worker}"
+    if worker_server.submit_task(task, @uuid)
+      @dispatcher.task_sent(job_id)
+      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
+    else
+      # On submission rejected
+      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker}. Worker probably gets scheduled to another job"
+      redo_task(task.id, job_id)
+    end
   rescue ThreadError # On empty task Queue
-    #TODO  Maybe fix this?
-    # This is a race condition that worker finishes and recome
-    # before we fetch result and delete job. It is however to costive to use protocol
-    # to avoid. Simply ignores it.
+    # Workers may finish and come back
+    # before we fetch last result and delete job.
+    # FIXME: this is happening too often, very possible bug...
+
     @logger.warn "#{job_id} received worker #{worker} but no task to process"
-    worker_server.release(@uuid)  # It takes client id for authentication
+    @dispatcher.reschedule
+    sleep 1 # Keep it from loop arrviing, debug use
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
     #TODO some recovery??
     return
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
   end
 
   def on_task_result_available(m)
@@ -46,13 +55,17 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     job_id = m.content[:job_id]
     task_id = m.content[:task_id]
     worker = m.content[:worker]
-    return if @results[job_id][task_id] != nil  # Outdated result message
+    @logger.debug "Result of #{job_id}[#{task_id}] is ready"
+    # Outdated result message
+    @logger.debug "Result of #{job_id}[#{task_id}] is already on hand" and return if @results[job_id][task_id] != nil
 
     # Might retrieve results other than those in the message
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
     @logger.info "Fetching result of #{job_id}[#{task_id}] from #{worker}"
     fetched_results = worker_server.get_results(@uuid, job_id)
-    @logger.info "Fetched result of #{job_id}[#{task_id}] from #{worker}"
+    @logger.info "Fetched #{fetched_results.size} result from #{worker}"
+
+    # Update the results
     add_results(fetched_results, job_id)
 
     # Clear results that are on hand...
@@ -64,7 +77,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     end
     clear_request = Worker::ClearResultRequest.new(@uuid, to_delete)
     worker_server.clear_result(clear_request)
-    @logger.info "Obtained results of #{job_id} on worker #{worker} deleted"
+    @logger.info "Deleted obtained results of #{job_id} on worker #{worker}"
+
+
+    job_done(job_id) if !@results[job_id].include? nil
 
     # Notified to retrieve but not found, mark as lost
     raise ResultLostError if @results[job_id][task_id] == nil
@@ -74,13 +90,16 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     raise NotImplementedError
     logger.error "Result of #{job_id}[#{task_id}] missing, ask to redo"
     redo_task(task_id, job_id)
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
   end
 
 end
 
 class Client
   include ClientMessageHandler
-  attr_reader :uuid, :results
+  attr_reader :uuid, :results, :finish_time, :submitted_jobs
 
   def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
     DRb.start_service
@@ -90,6 +109,7 @@ class Client
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
     @results = {}
+    @finish_time = {}
     @logger = logger
     return
   end
@@ -102,38 +122,35 @@ class Client
   end
 
   def done?(job_id_list=nil)
-    @rwlock.with_read_lock do
-      # Default value nil stands for all jobs
-      # Should not use default value parameter for obtaining this must be done using read lock
-      job_id_list = @submitted_jobs.keys if job_id_list == nil
-      raise ArgumentError if !job_id_list.is_a? Array
-      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
-      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-      @logger.debug "Checking on #{job_id_list}"
-      job_id_list.each{|j| return false unless @job_done[j]}
-    end
-    return true
-  end
-
-  def wait(job_id_list)
     raise ArgumentError if !job_id_list.is_a? Array
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-    until done?(job_id_list)
+    @logger.debug "Checking on #{job_id_list}"
+    job_id_list.each{|j| return false unless @job_done[j]}
+    return true
+  rescue ArgumentError
+    @logger.fatal job_id_list
+    raise
+  end
+
+  def wait(job_id_list=nil)
+    # Default value nil stands for all jobs
+    # Should not use default value parameter for obtaining this must be done using read lock
+    if job_id_list != nil
+      raise ArgumentError if !job_id_list.is_a? Array
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
+      raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
+    end
+    until @rwlock.with_read_lock{done?(job_id_list == nil ? @submitted_jobs.keys : job_id_list)} do
       @logger.debug "There are still jobs undone, keep waiting"
       Thread::stop
     end
-    @logger.info "Jobs #{job_id_list} are done!"
+    @logger.info "Jobs#{job_id_list} are #{"all " if job_id_list == nil}done!"
     return
   end
 
   def wait_all()
-    # wait_all is a wait on all jobs.
-    until done?
-      @logger.debug "There are still jobs undone, keep waiting"
-      Thread::stop
-    end
-    @logger.info "Jobs are all done!"
+    wait
     return
   end
 
@@ -211,17 +228,21 @@ class Client
       end
     end
 
-    job_done(job_id) if !@results[job_id].include? nil
     return
   end
 
   def job_done(job_id)
-    @logger.info "Job #{job_id} completed, ask to delete."
-    @rwlock.with_write_lock{@job_done[job_id] = true}
+    raise ArgumentError if !@submitted_jobs.has_key? job_id
+    return if @rwlock.with_read_lock{@job_done[job_id]}
+    finish_time = Time.now
+    @rwlock.with_write_lock do
+      @finish_time[job_id] = finish_time
+      @job_done[job_id] = true
+    end
+    @logger.info "Job #{job_id} completed at #{@finish_time[job_id]}, ask to delete."
     delete_job(job_id)
-
-    # Make main thread run if it's sleeping in #wait....
-    Thread::main.run and @logger.debug "Notifies main thread wait to check if done" if Thread::main.stop?  end
+    Thread::main.run and @logger.debug "Notifies main thread wait to check if waiting jobs are done"
+  end
 
   def delete_job(job_id)
     @logger.info "Contact dispatcher to delete job #{job_id}"
@@ -231,7 +252,7 @@ class Client
   end
 
   def redo_task(task_id, job_id)
-    @submitted_job[job_id][:task_queue] << @submitted_job[job_id][:job].task[task_id]
+    @submitted_jobs[job_id][:task_queue] << @submitted_jobs[job_id][:job].task[task_id]
     @dispatcher.redo_task(job_id)
     return
   end

@@ -19,7 +19,7 @@ OptionParser.new do |opts|
     $options[:deadline_rate] = r
   end
   opts.on( '-c rate', '--cpu-scale-rate rate', Float, 'Set job scale rate' ) do |r|
-    $options[:job_scale_rate] = r 
+    $options[:job_scale_rate] = r
   end
   opts.on( '-w rate', '--wait-time-scale-rate rate', Float, 'Set job scale rate' ) do |r|
     $options[:wait_time_scale_rate] = r
