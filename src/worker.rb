@@ -25,6 +25,7 @@ module Worker::STATUS
   BUSY       = :BUSY        # Running a task
 end
 
+
 class Worker < BaseServer
   attr_reader :name, :status, :id, :avg_running_time
   attr_writer :status_checker
@@ -84,14 +85,18 @@ class Worker < BaseServer
   # shouldn't be any race condition here.
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
-    @assignment.update{|_| a}
-    @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+    @assignment.update do |_|
+      @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+      a
+    end
 
-    # FIXME: State is corrupted by the following 2 lines
-    # 1. BUSY state gets corrupted by force writing state
-    # 2. main.run corrupts waiting of the condition variable @task_ready
-    self.status = STATUS::OCCUPIED
-    Thread::main.run
+    #TODO: Refactor: make client messages as a queue and future value.
+    # So we can process it in main thread. The code will become cleaner
+    if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
+      self.status = STATUS::OCCUPIED
+      @logger.debug "Notifies main thread to keep executing"
+      Thread::main.run
+    end
     return
   end
 
@@ -119,34 +124,45 @@ class Worker < BaseServer
   def awake                         # AVAILABLE ONLY
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
     @logger.debug "Awoken to fetch new assignment"
-    @dispatcher.on_worker_available(@name)
+    next_job_assigned = @dispatcher.on_worker_available(@name)
+    @logger.debug "Fetched #{next_job_assigned.inspect}"
+    return
   end
 
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
     @logger.debug "Validating assignment"
     valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
-
-    if valid
-      @logger.debug "Assignment of job #{self.assignment.job_id} valid."
-    else
-      Thread::main.raise InvalidAssignmentError
-    end
-
+    valid ?
+      @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
+      Thread::main.raise(InvalidAssignmentError)
     return valid
   end
 
   def submit_task(task, client_id)
     raise ArgumentError if !task.is_a? Task
-    raise ArgumentError if self.status != STATUS::OCCUPIED
+    raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
+    raise WorkerStateCorruptError if !Thread::main.stop?
+
     @mutex.synchronize do
       a = self.assignment
-      @logger.warn "Job ID mismatch: assigned #{a.job_id} but submitted #{task.job_id}" and return false if a.job_id != task.job_id
-      @logger.warn "Client ID mismatch: assigned #{a.client_id} but #{client_id} is submitting" and return false if a.client_id != client_id
+      if a.job_id != task.job_id
+        @logger.warn "Job ID mismatch: assigned #{a.job_id} but submitted #{task.job_id}"
+        return false
+      end
+      if a.client_id != client_id
+        @logger.warn "Client ID mismatch: assigned #{a.client_id} but #{client_id} is submitting"
+        return false
+      end
+      raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
+      raise WorkerStateCorruptError if !Thread::main.stop?
       Thread::main[:task] = task
       Thread::main[:client_id] = client_id
-      Thread::main.raise 'State Corrupted' and raise 'State Corrupted' if !Thread::main.stop?
+      Thread::main.raise WorkerStateCorruptError and raise WorkerStateCorruptError if !Thread::main.stop?
+      raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
+      raise WorkerStateCorruptError if !Thread::main.stop?
       @logger.debug "#{task.job_id}[#{task.id}] submitted"
+      self.status = STATUS::BUSY
       @task_ready.signal
       return true
     end
@@ -167,12 +183,11 @@ class Worker < BaseServer
           #Timeout::timeout(DEFAULT_TIMEOUT)  #TODO: Maybe enable this in production....
           @task_ready.wait(@mutex)      # FIXME: might get waken by #assignment=
 
-          # FIXME: The following error WILL occur.
+          raise WorkerStateCorruptError, "Not waken up by client submitting task" if @status != STATUS::BUSY
           raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
           raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
 
           # Task submitted. Run!!!
-          self.status = STATUS::BUSY    # FIXME: might get overwrite by #assignment=
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
           Thread.current[:task] = nil
           Thread.current[:client_id] = nil
@@ -189,14 +204,14 @@ class Worker < BaseServer
         rescue WorkerStateCorruptError => e
           @logger.fatal e.message
           @logger.fatal e.backtrace.join("\n")
-          exit(false) # FIXME: Remove this after fixing state corrupt bug; debug use!!!
+          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
         rescue Timeout::Error
           @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
           next
         rescue => e
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
-          exit(false) # FIXME: Remove this after fixing state corrupt bug; debug use!!!
+          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
         ensure
           self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
         end
