@@ -40,6 +40,7 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
+    return # FIXME debug use, remove me
     if arg[:update_period]
       Thread.new do
         EventMachine.run do
@@ -143,7 +144,11 @@ class StatusChecker < BaseServer
 
   def log_running_time(job_id, time)
     raise ArgumentError unless time.is_a? Float
-    @lock.with_write_lock{@job_running_time[job_id] << time} # Necessary even it's a ReadWriteLockHash
+    @lock.with_write_lock do # Necessary even it's a ReadWriteLockHash
+      @logger.debug "Logging runtime of #{job_id}"
+      @job_running_time[job_id] << time
+      @logger.debug "Logged runtime of #{job_id}"
+    end
     return 
   end
 

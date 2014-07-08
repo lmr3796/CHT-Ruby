@@ -99,7 +99,7 @@ class Dispatcher::ScheduleManager
         workers.each{|worker| @worker_job_table[worker] = job_id}
       end
     end
-    @on_schedule_callback.call(@job_worker_table) if @on_schedule_callback.respond_to? :call
+    @on_schedule_callback.call if @on_schedule_callback.respond_to? :call
     @logger.info 'Updated schedule successfully'
     @logger.debug "Current schedule: #{@job_worker_table}"
     return
@@ -107,8 +107,8 @@ class Dispatcher::ScheduleManager
 
   # Observer callbacks
   def on_job_submitted(change_list)
+    @status_checker.register_job(change_list) # Must make up entry before rescheduling...
     schedule_job
-    @status_checker.register_job(change_list)
     return
   end
 
@@ -146,7 +146,7 @@ class Dispatcher < BaseServer
     return
   end
 
-  def on_reschedule(schedule)
+  def on_reschedule
     @logger.debug "Ask status checker to recollect status"
     @status_checker.collect_status
     return
@@ -159,6 +159,7 @@ class Dispatcher < BaseServer
     DRbObject.new_with_uri(worker_uri(worker)).assignment = job_assignment # May have to clean this ??
     return
   end
+  private :assign_worker_to_job
 
   # General APIs
   def reschedule()
@@ -186,8 +187,8 @@ end
 module Dispatcher::DispatcherJobListChangeCallBack
   def on_job_submitted(_)
     @logger.debug "Current jobs: #{@job_list.keys}"
-    # Validate zombie assignment occupations on job_list_change
-    @status_checker.release_zombie_occupied_worker
+    ## Validate zombie assignment occupations on job_list_change
+    #@status_checker.release_zombie_occupied_worker
     return
   end
 
@@ -199,9 +200,9 @@ module Dispatcher::DispatcherJobListChangeCallBack
       @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
       @logger.info "Unregistering #{job_id} from status checker"
     end
-    # Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
-    @status_checker.release_zombie_occupied_worker
-    # P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
+    ## Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
+    #@status_checker.release_zombie_occupied_worker
+    ## P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
     return
   end
 end
