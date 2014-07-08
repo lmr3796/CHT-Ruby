@@ -235,7 +235,7 @@ class Client
     raise ArgumentError if !@submitted_jobs.has_key? job_id
     return if @rwlock.with_read_lock{@job_done[job_id]}
     finish_time = Time.now
-    @rwlock.with_write_lock do 
+    @rwlock.with_write_lock do
       @finish_time[job_id] = finish_time
       @job_done[job_id] = true
     end

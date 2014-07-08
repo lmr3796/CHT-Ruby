@@ -50,7 +50,7 @@ class WorkloadSynthesizer
     self.deadline_rate = opt[:deadline_rate] if opt.has_key? :deadline_rate
   end
   def job_set=(j)
-    @job_set = Marshal.load(Marshal.dump(j)) 
+    @job_set = Marshal.load(Marshal.dump(j))
   end
   def deadline_rate=(r)
     raise ArgumentError if not r.is_a? Numeric
@@ -86,7 +86,7 @@ class WorkloadSynthesizer
   end
 
   def estimated_cpu_time()
-    return job_set_to_run.map{|j|j[:run_time] * j[:allocated_processors]}.reduce(:+) 
+    return job_set_to_run.map{|j|j[:run_time] * j[:allocated_processors]}.reduce(:+)
   end
   def shift_submit_time(job_set)
     raise 'Jobs not set' if job_set == nil
@@ -124,7 +124,7 @@ class WorkloadSynthesizer
   end
 
   # Synthesize from workload
-  def job_set_to_run 
+  def job_set_to_run
     j = Marshal.load(Marshal.dump(@job_set))
     return [] if j == nil
     j = sample(j)
@@ -213,10 +213,10 @@ class WorkloadSynthesizer
 
       # Convert deadline to real world time
       now = Time.now
-      b[:batch].each do |j| 
+      b[:batch].each do |j|
         # Time instance must convert back to float for add operator
         j.deadline = now + j.deadline.to_f
-      end  
+      end
 
       # Run!!
       client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER),

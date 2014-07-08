@@ -81,7 +81,7 @@ class StatusChecker < BaseServer
           status = Worker::STATUS::DOWN
         ensure
           @logger.info "#{w} is #{status}"
-          @worker_status_table[w] = status 
+          @worker_status_table[w] = status
           @worker_avg_running_time[w] = avg_time
         end
       end
@@ -149,7 +149,7 @@ class StatusChecker < BaseServer
       @job_running_time[job_id] << time
       @logger.debug "Logged runtime of #{job_id}"
     end
-    return 
+    return
   end
 
 end

@@ -80,7 +80,7 @@ class Worker < BaseServer
     return @assignment.value
   end
 
-  # Should only be invoked while on_worker_available, so there 
+  # Should only be invoked while on_worker_available, so there
   # shouldn't be any race condition here.
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
