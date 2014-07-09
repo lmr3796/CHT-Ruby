@@ -231,7 +231,7 @@ module Dispatcher::DispatcherClientInterface
   def submit_jobs(job_id_table, client_id)
     @logger.info "Job submitted: #{job_id_table.keys}"
     @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
-    @job_list.merge! job_id_table
+    @job_list.merge!(job_id_table)
     return job_id_table.keys  # Returning a UUID list stands for acceptance
   end
 
