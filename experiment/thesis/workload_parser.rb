@@ -43,10 +43,11 @@ class WorkloadSynthesizer
     self.reset
     self.job_set = job_set
     self.sample_rate = opt[:job_sample_rate] if opt.has_key? :job_sample_rate
-    self.job_scale_rate  = opt[:job_scale_rate] if opt.has_key? :job_scale_rate
-    self.wait_time_scale_rate  = opt[:wait_time_scale_rate] if opt.has_key? :wait_time_scale_rate
-    self.exec_time_limit  = opt[:job_exec_time_limit] if opt.has_key? :job_exec_time_limit
-    self.wait_time_limit  = opt[:job_wait_time_limit] if opt.has_key? :job_wait_time_limit
+    self.job_scale_rate = opt[:job_scale_rate] if opt.has_key? :job_scale_rate
+    self.wait_time_scale_rate = opt[:wait_time_scale_rate] if opt.has_key? :wait_time_scale_rate
+    self.batch_threshold = opt[:batch_threshold] if opt.has_key? :batch_threshold
+    self.exec_time_limit = opt[:job_exec_time_limit] if opt.has_key? :job_exec_time_limit
+    self.wait_time_limit = opt[:job_wait_time_limit] if opt.has_key? :job_wait_time_limit
     self.deadline_rate = opt[:deadline_rate] if opt.has_key? :deadline_rate
   end
   def job_set=(j)
@@ -67,6 +68,11 @@ class WorkloadSynthesizer
   def wait_time_scale_rate=(r)
     raise ArgumentError if not r.is_a? Numeric
     @wait_time_scale_rate = r
+  end
+  def batch_threshold=(t)
+    raise ArgumentError if not t.is_a? Numeric
+    raise ArgumentError if t < 0
+    @batch_threshold = t
   end
   def exec_time_limit=(t)
     raise ArgumentError if not t.is_a? Range
@@ -131,7 +137,6 @@ class WorkloadSynthesizer
     j = filter_exec_time_limit(j)
     j = shift_submit_time(j)
     j = filter_wait_time_limit(j)
-    #p "jizz: #{j.size}"
     j = scale(j)
     j = j.each do |i|
       i[:deadline] = i[:run_time] * @deadline_rate
@@ -151,8 +156,9 @@ class WorkloadSynthesizer
 
     job_set = job_set.map do |j|
       job = Job.new
-      # Use exec time deadline first, convert it on execution
+      # Use execution time as deadline first, convert it on simulation
       job.deadline = Time.at(j[:deadline])
+
       # Model priority by user
       job.priority = group[j[:user_id]]
       (0...j[:allocated_processors]).each do
@@ -172,7 +178,7 @@ class WorkloadSynthesizer
     # Merge batch
     merged_batch = [{:wait_time => 0, :batch =>[]}]
     job_set.each do |j|
-      if j[:wait_time] > 1 or merged_batch[-1][:wait_time] > 1
+      if j[:wait_time] > @batch_threshold or merged_batch[-1][:wait_time] > @batch_threshold
         merged_batch << {:wait_time => j[:wait_time], :batch =>[j[:job]]}
       else
         merged_batch[-1][:wait_time] += j[:wait_time]
@@ -187,46 +193,34 @@ class WorkloadSynthesizer
       b[:batch].each{|j| j.deadline = Time.at(batch_deadline)}
     end
 
-    #p merged_batch.map{|i|i[:wait_time]}
-    #p merged_batch.map{|i|i[:wait_time]}.reduce(:+)
-    #p job_set.map{|i|i[:wait_time]}.reduce(:+)
-
-    ## DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ## Send all at a time
-    #merged_batch = [merged_batch.reduce do |memo, obj|
-    #  {:wait_time => memo[:wait_time], :batch => memo[:batch] + obj[:batch]}
-    #end]
-    ## END DEBUG USE!!!!!!!!!!!!!!!!!!!!!!!!!!
     return merged_batch
   end
 
   # Really executes it
   def run(merged_batch)
-    # Execute
-    client_logger = Logger.new(STDERR)
-    client_logger.level = Logger::INFO
-    client_list = []
     total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
+    # Execute
+    dispatcher_uri = CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER)
+    client_logger = Logger.new(STDERR)
+    client_logger.level = CHT_Configuration::LOGGER_LEVEL
+    client = Client.new(dispatcher_uri, [], client_logger)
+    client.register
+    client.start
     merged_batch.each do |b|
       @logger.debug "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
 
       # Convert deadline to real world time
       now = Time.now
-      b[:batch].each do |j|
-        # Time instance must convert back to float for add operator
-        j.deadline = now + j.deadline.to_f
-      end
+      b[:batch].each{|j| j.deadline = now + j.deadline.to_f}
 
       # Run!!
-      client_list << Client.new(CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER),
-                                b[:batch], 800, client_logger)
+      client.submit_jobs(b[:batch])
       jobs_left -= b[:batch].size
-      @logger.debug "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
-      client_list[-1].start
+      @logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
     end
-    client_list.each{|c| c.wait_all}
-    return client_list.map{|c| c.result}
+    client.wait_all
+    return client.submitted_jobs, client.finish_time
   end
 
   private :sample, :scale, :filter_exec_time_limit
