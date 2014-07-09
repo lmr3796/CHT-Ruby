@@ -35,6 +35,10 @@ OptionParser.new do |opts|
   opts.on("-b time", "--batching-threshold time", Float, "Set the threshold to batch jobs together. #{$options[:batch_threshold]} by default") do |r|
     $options[:batch_threshold] = r
   end
+  opts.on("--serialize file", String, "Serialize the batch and dump to target file instead of executing it.") do |r|
+    $options[:serialize] = r
+  end
+  opts.on("--deserialize", "The input file is a serialized batch."){$options[:deserialize]=true}
   #opts.on( '-t lower,upper', '--run-time-limit lower,upper', Array, 'Set job run time limit' ) do |r|
   #  $options[:job_exec_time_limit] = Range.new r[0].to_f, r[1].to_f
   #end
@@ -63,9 +67,27 @@ rescue
 end
 
 $options[:logger] = Logger.new(STDERR)
-jobs = StandardWorkloadFormatParser.from_file $options[:input]
-runner = WorkloadSynthesizer.new jobs, $options
-batch = runner.gen_workload
+if $options[:deserialize]
+  $stderr.puts "Deserialize from file."
+  jobs, batch = Marshal.load($options[:input].read) 
+  runner = WorkloadSynthesizer.new jobs, $options
+else
+  $stderr.puts "Parse from swf file."
+  jobs = StandardWorkloadFormatParser.from_file $options[:input]
+  runner = WorkloadSynthesizer.new jobs, $options
+  batch = runner.gen_workload
+end
+if $options[:serialize]
+  dump = Marshal.dump([jobs, batch])
+  begin
+    output_file = open($options[:serialize], "w")
+  rescue
+    puts "Can't open file #{f}"
+    exit(-1)
+  end
+  raise "Output failed." if output_file.write(dump) != dump.size
+  exit
+end
 $stderr.puts "Total #{batch.size} batches, #{batch.map{|b| b[:batch].size}.reduce(:+)} jobs to simulate"
 exit if !!$options[:dry_run]
 jobs, finish_time = runner.run(batch)
