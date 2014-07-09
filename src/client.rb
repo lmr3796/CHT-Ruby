@@ -23,7 +23,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     job_id = m.content[:job_id]
     worker = m.content[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
-    task = @submitted_jobs[job_id][:task_queue].pop(true) # Nonblocked, raise error if empty
+    task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
 
     if worker_server.submit_task(task, @uuid)
       @dispatcher.task_sent(job_id)
@@ -104,11 +104,12 @@ class Client
     DRb.start_service
     @rwlock = ReadWriteLock.new
     @submitted_jobs = ReadWriteLockHash.new
+    @task_queue = ReadWriteLockHash.new
     @job_done = ReadWriteLockHash.new
+    @finish_time = {}
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @jobs = jobs
     @results = {}
-    @finish_time = {}
     @logger = logger
     return
   end
@@ -190,16 +191,15 @@ class Client
     @logger.info "Preparing local information of jobs: #{job_id_list}"
     jobs = Hash[job_id_list.zip(jobs)]
     job_id_list.each do |job_id|  # Build a task queue for each job, indexed with job_id returned from dispatcher
-      @submitted_jobs[job_id] = {
-        :task_queue => Queue.new, # must be synchronized for it's consumed under multithreaded env.
-        :job => jobs[job_id]
-      }
+      @submitted_jobs[job_id] = jobs[job_id]
+      @results[job_id] = [nil] * jobs[job_id].task.size
       @job_done[job_id] = false
+      tq = Queue.new # must be synchronized for it's consumed under multithreaded env.
       jobs[job_id].task.each do |t|
         t.job_id = job_id
-        @submitted_jobs[job_id][:task_queue] << t
+        tq << t
       end
-      @results[job_id] = [nil] * jobs[job_id].task.size
+      @task_queue[job_id] = tq
     end
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
@@ -251,7 +251,7 @@ class Client
   end
 
   def redo_task(task_id, job_id)
-    @submitted_jobs[job_id][:task_queue] << @submitted_jobs[job_id][:job].task[task_id]
+    @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
     @dispatcher.redo_task(job_id)
     return
   end
