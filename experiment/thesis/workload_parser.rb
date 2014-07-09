@@ -27,7 +27,7 @@ module StandardWorkloadFormatParser
     :think_time_from_preceding,
   ]
   def from_file(f)
-    return f.map{|l| from_line l.strip}
+    return f.reject{|l| l[0] == ';'}.map{|l| from_line l.strip}
   end
   def from_line(l)
     return Hash[FIELDS.zip(l.split.map{|s|s.to_i})].select{|k,v| v!=-1}

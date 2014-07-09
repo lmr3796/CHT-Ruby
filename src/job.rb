@@ -61,6 +61,11 @@ class Job
     @deadline = Time.at(deadline)
     @task_remaining = Atomic.new(@task_remaining)
   end
+
+  def eql?(rhs)
+    return false unless rhs.is_a? Job
+    return marshal_dump().eql?(rhs.marshal_dump())
+  end
 end
 
 class Task
@@ -71,6 +76,19 @@ class Task
     @cmd = cmd
     @args = args
     return
+  end
+
+  def marshal_dump()
+    [@id, @job_id, @cmd, @args]
+  end
+
+  def marshal_load(array)
+    @id, @job_id, @cmd, @args = array
+  end
+
+  def eql?(rhs)
+    return false unless rhs.is_a? Task
+    return marshal_dump().eql?(rhs.marshal_dump())
   end
 end
 
