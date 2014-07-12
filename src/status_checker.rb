@@ -44,7 +44,8 @@ class StatusChecker < BaseServer
       Thread.new do
         EventMachine.run do
           EventMachine.add_periodic_timer(arg[:update_period]) do
-            @logger.info "Periodically rescheduling"
+            @logger.info "Periodically collecting status and rescheduling"
+            collect_status
             begin
               @logger.info 'Asked to reschedule'
               @dispatcher.reschedule
