@@ -70,7 +70,6 @@ $stderr.puts "Parse from swf input."
 jobs = StandardWorkloadFormatParser.from_file $options[:input]
 runner = WorkloadSynthesizer.new(jobs, $options)
 batch = runner.gen_workload
-
-dump = Marshal.dump([jobs, batch])
+dump = Marshal.dump(batch)
 raise "Output failed." if $options[:output].write(dump) != dump.size
 exit

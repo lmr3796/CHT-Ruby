@@ -196,6 +196,10 @@ class WorkloadSynthesizer
     return merged_batch
   end
 
+  private :sample, :scale, :filter_exec_time_limit
+end
+
+module WorkloadRunner
   # Really executes it
   def run(merged_batch)
     total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
@@ -207,7 +211,7 @@ class WorkloadSynthesizer
     client.register
     client.start
     merged_batch.each do |b|
-      @logger.debug "Sleep for #{b[:wait_time]}"
+      client_logger.debug "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
 
       # Convert deadline to real world time
@@ -217,11 +221,10 @@ class WorkloadSynthesizer
       # Run!!
       client.submit_jobs(b[:batch])
       jobs_left -= b[:batch].size
-      @logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
+      client_logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
     end
     client.wait_all
-    return client.submitted_jobs, client.finish_time
+    return Hash.new.merge(client.submitted_jobs), client.finish_time
   end
-
-  private :sample, :scale, :filter_exec_time_limit
+  module_function :run
 end

@@ -52,14 +52,14 @@ if(f = ARGV.shift)
     exit(-1)
   end
 end
-$options[:input] ||= $stdin
 $options[:output] ||= $stdout
 
 $options[:logger] = Logger.new(STDERR)
 $stderr.puts "Deserialize from input."
-jobs, batch = Marshal.load($options[:input].read) 
-runner = WorkloadSynthesizer.new jobs, $options
+batch = Marshal.load($options[:input].read) 
 $stderr.puts "Total #{batch.size} batches, #{batch.map{|b| b[:batch].size}.reduce(:+)} jobs to simulate"
 exit if !!$options[:dry_run]
-jobs, finish_time = runner.run(batch)
-$options[:output].puts "#{finish_time.select{|j, t| jobs[j].deadline >= t}.size} out of #{jobs.size} jobs met deadline."
+jobs, finish_time = WorkloadRunner::run(batch)
+dump = Marshal.dump([jobs,finish_time])
+raise "Output failed." if $options[:output].write(dump) != dump.size
+puts "#{finish_time.select{|j, t| jobs[j].deadline >= t}.size} out of #{jobs.size} jobs met deadline."
