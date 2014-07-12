@@ -40,23 +40,15 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
-    return # FIXME debug use, remove me
     if arg[:update_period]
       Thread.new do
         EventMachine.run do
           EventMachine.add_periodic_timer(arg[:update_period]) do
-            @logger.info "Periodically updating status"
-            begin
-              collect_status
-            rescue => e
-              @logger.error "Error collecting status"
-              @logger.error e.message
-              @logger.error e.backtrace.join("\n")
-            end
+            @logger.info "Periodically rescheduling"
             begin
               @logger.info 'Asked to reschedule'
               @dispatcher.reschedule
-            rescue DRbConnError=> e
+            rescue DRbConnError
               @logger.error "Error contacting dispatcher for reschedule"
             end
           end

@@ -1,0 +1,10 @@
+The dumper used 
+`dump = Marshal.dump([jobs, batch])`
+
+so the serializer must be careful for this...
+
+
+I'll change this code, but if anyone wants to reuse this must watchout
+
+e7357240177b7767abae3f30b8116eaff755d2f2 is the commit that still uses this dumper format
+

@@ -10,7 +10,7 @@ def get_client()
   logger.level = CHT_Configuration::LOGGER_LEVEL
   dispatcher_addr = CHT_Configuration::Address::DISPATCHER
   dispatcher_uri = CHT_Configuration::Address::druby_uri dispatcher_addr
-  return Client.new(dispatcher_uri, [], logger)
+  return Client.new(dispatcher_uri, logger)
 end
 def get_job(deadline=Time.now+300)
   j = Job.new
