@@ -168,29 +168,30 @@ class Worker < BaseServer
     end
   end
 
+  def validate_state_after_client_submission
+    raise WorkerStateCorruptError, "Not waken up by client submitting task" if @status != STATUS::BUSY
+    raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
+    raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
+  end
+  private :validate_state_after_client_submission
+
   def start
     loop do
       Thread::stop if @status == STATUS::AVAILABLE
       @mutex.synchronize do  # Worker is dedicated
         begin
-          #@occupied.wait(@mutex) if @status != STATUS::OCCUPIED
-
           # Must be OCCUPIED here and client waits for client to submit a task
           raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
 
           a = self.assignment
           tell_client_ready(a.client_id, a.job_id)
-          #Timeout::timeout(DEFAULT_TIMEOUT)  #TODO: Maybe enable this in production....
-          @task_ready.wait(@mutex)      # FIXME: might get waken by #assignment=
-
-          raise WorkerStateCorruptError, "Not waken up by client submitting task" if @status != STATUS::BUSY
-          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
-          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
+          #Timeout::timeout(DEFAULT_TIMEOUT)  # TODO: Maybe enable this in production....
+          @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
+          validate_state_after_client_submission
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          Thread.current[:task] = nil
-          Thread.current[:client_id] = nil
+          Thread.current[:task] = Thread.current[:client_id] = nil
           result = run_task(task)
           @result_manager.add_result(client_id, result)
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
@@ -222,27 +223,10 @@ class Worker < BaseServer
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     @logger.debug "#{task.job_id}[#{task.id}] running."
-    result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
-    log_running_time(task.job_id, result.run_time)
-    @logger.debug "Finished #{task.job_id}[#{task.id}] in #{result.run_time} seconds"
-    return result
-  end
-
-  def run_cmd(command, *args)
-    @logger.info "Running `#{command} #{args.join(' ')}`"
-    start = Time.now
-    # Should use wait_thr instead of $?; $? not working when using DRb
-    stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
-    result = {
-      :stdout => stdout.readlines.join(''),
-      :stderr => stderr.readlines.join(''),
-      :status => wait_thr.value,
-      :run_time => Time.now - start
-    }
-    @logger.debug "`#{command} #{args.join(' ')}` done in #{result[:run_time]} seconds"
-    stdin.close
-    stdout.close
-    stderr.close
+    @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
+    result = task.run
+    log_running_time(result.job_id, result.run_time)
+    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     return result
   end
 

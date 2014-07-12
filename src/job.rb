@@ -78,6 +78,20 @@ class Task
     return
   end
 
+  def run()
+    start = Time.now
+    # Should use wait_thr instead of $?; $? not working when using DRb
+    cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3(@cmd, *@args)  #TODO: Possible with a chroot?
+    stdout = cmd_stdout.readlines.join('')
+    stderr = cmd_stderr.readlines.join('')
+    status = wait_thr.value
+    cmd_stdin.close
+    cmd_stdout.close
+    cmd_stderr.close
+    run_time = Time.now - start
+    return TaskResult.new(@id, @job_id, run_time, status, stdout, stderr)
+  end
+
   def marshal_dump()
     [@id, @job_id, @cmd, @args]
   end
@@ -92,10 +106,15 @@ class Task
   end
 end
 
-TaskResult = Struct.new(:task_id, :job_id, :status, :run_time, :stdout, :stderr)
 class TaskResult
-  def initialize(task_id, job_id, arg={})
-    super(task_id, job_id, arg[:status], arg[:run_time], arg[:stdout], arg[:stderr])
+  attr_reader :task_id, :job_id, :run_time, :status, :stdout, :stderr
+  def initialize(task_id, job_id, run_time, status, stdout, stderr)
+    @task_id = task_id
+    @job_id = job_id
+    @run_time = run_time
+    @status = status
+    @stdout = stdout
+    @stderr = stderr
     return
   end
 end

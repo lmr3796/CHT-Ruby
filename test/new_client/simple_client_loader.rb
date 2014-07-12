@@ -38,5 +38,3 @@ c.submit_jobs([get_job, get_job, get_job])
 c.wait_all
 meet_cnt = c.results.select{|j, rl| c.finish_time[j] < c.submitted_jobs[j].deadline}.size
 p "#{meet_cnt} out of #{c.results.size} jobs met deadline."
-
-#Thread::stop
