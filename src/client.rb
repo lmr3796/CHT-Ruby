@@ -98,18 +98,18 @@ end
 
 class Client
   include ClientMessageHandler
-  attr_reader :uuid, :results, :finish_time, :submitted_jobs
+  attr_reader :uuid, :results, :submit_time, :finish_time, :submitted_jobs, :rwlock
 
-  def initialize(dispatcher_uri, jobs=[], logger=Logger.new(STDERR))
+  def initialize(dispatcher_uri, logger=Logger.new(STDERR))
     DRb.start_service
     @rwlock = ReadWriteLock.new
     @submitted_jobs = ReadWriteLockHash.new
     @task_queue = ReadWriteLockHash.new
     @job_done = ReadWriteLockHash.new
+    @submit_time = {}
     @finish_time = {}
-    @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
-    @jobs = jobs
     @results = {}
+    @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @logger = logger
     return
   end
@@ -168,7 +168,6 @@ class Client
     @logger.info "Sending testing message."
     @dispatcher.push_message(@uuid, MessageService::TEST_MESSAGE)
     @logger.info "Test message sent."
-    submit_jobs(@jobs) unless @jobs.empty?
     return
   end
 
@@ -203,6 +202,8 @@ class Client
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
     raise 'Submissiion failure' if job_id_list != jobs.keys
+    submit_time = Time.now
+    job_id_list.each{|job_id|@submit_time[job_id] = submit_time}
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
     return job_id_list
