@@ -217,3 +217,4 @@ module MessageService
     end
   end
 end
+MessageService::TEST_MESSAGE = MessageService::Message.new(:chat, nil, "Test!, I'm #{@uuid}")

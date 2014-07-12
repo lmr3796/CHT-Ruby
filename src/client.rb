@@ -166,8 +166,7 @@ class Client
     @msg_service.start
     @logger.info "Running message service."
     @logger.info "Sending testing message."
-    test_msg = MessageService::Message.new(:chat, nil, "Test!, I'm #{@uuid}")
-    @dispatcher.push_message(@uuid, test_msg)
+    @dispatcher.push_message(@uuid, MessageService::TEST_MESSAGE)
     @logger.info "Test message sent."
     submit_jobs(@jobs) unless @jobs.empty?
     return
