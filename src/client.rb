@@ -23,8 +23,23 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     job_id = m.content[:job_id]
     worker = m.content[:worker]
     worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
-    task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
+    if !@task_queue.has_key?(job_id)
+      @logger.warn("#{job_id} doesn't exist.")
+      worker_server.validate_occupied_assignment or worker_server.release(@uuid)
+      return
+    end
 
+    begin
+      task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
+    rescue ThreadError # On empty task Queue
+      # Workers may finish and come back before we fetch last result and delete job.
+      @logger.warn "#{job_id} received worker #{worker} but no task to process"
+      @dispatcher.reschedule
+      worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
+      return
+    end
+
+    # There are remaining task to execute
     if worker_server.submit_task(task, @uuid)
       @dispatcher.task_sent(job_id)
       @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
@@ -33,13 +48,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
       @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker}. Worker probably gets scheduled to another job"
       redo_task(task.id, job_id)
     end
-  rescue ThreadError # On empty task Queue
-    # Workers may finish and come back
-    # before we fetch last result and delete job.
-
-    @logger.warn "#{job_id} received worker #{worker} but no task to process"
-    @dispatcher.reschedule
-    sleep 1 # Keep it from loop arrviing, debug use
+    return
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker}"
     #TODO some recovery??
