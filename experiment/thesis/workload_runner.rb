@@ -55,11 +55,14 @@ end
 $options[:output] ||= $stdout
 
 $options[:logger] = Logger.new(STDERR)
+$options[:logger].level = Logger::DEBUG
 $stderr.puts "Deserialize from input."
 batch = Marshal.load($options[:input].read) 
 $stderr.puts "Total #{batch.size} batches, #{batch.map{|b| b[:batch].size}.reduce(:+)} jobs to simulate"
 exit if !!$options[:dry_run]
-jobs, finish_time = WorkloadRunner::run(batch)
-dump = Marshal.dump([jobs,finish_time])
+result = WorkloadRunner::run(batch, $options[:logger]) 
+dump = Marshal.dump(result)
+finish_time = result[:finish_time]
+jobs = result[:jobs]
 raise "Output failed." if $options[:output].write(dump) != dump.size
 puts "#{finish_time.select{|j, t| jobs[j].deadline >= t}.size} out of #{jobs.size} jobs met deadline."

@@ -25,7 +25,7 @@ module Worker::STATUS
   BUSY       = :BUSY        # Running a task
 end
 
-
+# TODO: refactor to state machine pattern
 class Worker < BaseServer
   attr_reader :name, :status, :id, :avg_running_time
   attr_writer :status_checker
@@ -44,8 +44,6 @@ class Worker < BaseServer
     @dispatcher = arg[:dispatcher]
     @status_checker = arg[:status_checker]
     @assignment = Atomic.new(JobAssignment.new) # Real task assignment should not depend on this, this is only for validating submission
-    @task_ready = ConditionVariable.new
-    @occupied = ConditionVariable.new
     return
   end
 
@@ -69,8 +67,6 @@ class Worker < BaseServer
 
     # Refactor this to a callback table if necessary; currently not.
     case s
-    when STATUS::OCCUPIED
-      @occupied.signal
     when STATUS::AVAILABLE
       @dispatcher.on_worker_available(@name)
     end
@@ -112,15 +108,6 @@ class Worker < BaseServer
     return
   end
 
-  def release(client_id)            # Should only be invoked by client
-    if self.assignment.client_id != client_id
-      @logger.error("Invalid caller client: #{client_id}")
-      return false
-    end
-    self.status = STATUS::AVAILABLE
-    return true
-  end
-
   def awake                         # AVAILABLE ONLY
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
     @logger.debug "Awoken to fetch new assignment"
@@ -137,6 +124,17 @@ class Worker < BaseServer
       @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
       Thread::main.raise(InvalidAssignmentError)
     return valid
+  end
+
+  def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
+    if self.assignment.client_id != client_id || self.assignment.job_id != job_id
+      @logger.error("Invalid caller client: #{client_id}")
+      return false
+    end
+    @logger.warn "Releasing by #{client_id}:#{job_id}"
+    Thread::main.raise(InvalidAssignmentError)
+    @logger.warn "Released by #{client_id}:#{job_id}"
+    return
   end
 
   def submit_task(task, client_id)
@@ -168,29 +166,31 @@ class Worker < BaseServer
     end
   end
 
+  def validate_state_after_client_submission
+    raise WorkerStateCorruptError, "Not waken up by client submitting task" if @status != STATUS::BUSY
+    raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
+    raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
+  end
+  private :validate_state_after_client_submission
+
   def start
     loop do
       Thread::stop if @status == STATUS::AVAILABLE
       @mutex.synchronize do  # Worker is dedicated
         begin
-          #@occupied.wait(@mutex) if @status != STATUS::OCCUPIED
-
           # Must be OCCUPIED here and client waits for client to submit a task
           raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
 
           a = self.assignment
+          @task_ready = ConditionVariable.new
           tell_client_ready(a.client_id, a.job_id)
-          #Timeout::timeout(DEFAULT_TIMEOUT)  #TODO: Maybe enable this in production....
-          @task_ready.wait(@mutex)      # FIXME: might get waken by #assignment=
-
-          raise WorkerStateCorruptError, "Not waken up by client submitting task" if @status != STATUS::BUSY
-          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:task] == nil
-          raise WorkerStateCorruptError, "No task submitted from client but runs." if Thread.current[:client_id] == nil
+          #Timeout::timeout(DEFAULT_TIMEOUT)  # TODO: Maybe enable this in production....
+          @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
+          validate_state_after_client_submission
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          Thread.current[:task] = nil
-          Thread.current[:client_id] = nil
+          Thread.current[:task] = Thread.current[:client_id] = nil
           result = run_task(task)
           @result_manager.add_result(client_id, result)
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
@@ -199,20 +199,20 @@ class Worker < BaseServer
                                                                           :task_id => task.id))
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
 
+        rescue Timeout::Error
+          @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
         rescue InvalidAssignmentError
           @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
         rescue WorkerStateCorruptError => e
           @logger.fatal e.message
           @logger.fatal e.backtrace.join("\n")
           system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
-        rescue Timeout::Error
-          @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
-          next
         rescue => e
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
           system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
         ensure
+          Thread.current[:task] = Thread.current[:client_id] = nil
           self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
         end
       end
@@ -222,27 +222,10 @@ class Worker < BaseServer
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     @logger.debug "#{task.job_id}[#{task.id}] running."
-    result = TaskResult.new(task.id, task.job_id, run_cmd(task.cmd, *task.args))
-    log_running_time(task.job_id, result.run_time)
-    @logger.debug "Finished #{task.job_id}[#{task.id}] in #{result.run_time} seconds"
-    return result
-  end
-
-  def run_cmd(command, *args)
-    @logger.info "Running `#{command} #{args.join(' ')}`"
-    start = Time.now
-    # Should use wait_thr instead of $?; $? not working when using DRb
-    stdin, stdout, stderr, wait_thr = Open3.popen3(command, *args)  #TODO: Possible with a chroot?
-    result = {
-      :stdout => stdout.readlines.join(''),
-      :stderr => stderr.readlines.join(''),
-      :status => wait_thr.value,
-      :run_time => Time.now - start
-    }
-    @logger.debug "`#{command} #{args.join(' ')}` done in #{result[:run_time]} seconds"
-    stdin.close
-    stdout.close
-    stderr.close
+    @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
+    result = task.run
+    log_running_time(result.job_id, result.run_time)
+    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     return result
   end
 

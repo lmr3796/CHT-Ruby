@@ -162,7 +162,7 @@ class WorkloadSynthesizer
       # Model priority by user
       job.priority = group[j[:user_id]]
       (0...j[:allocated_processors]).each do
-        job.add_task Task.new("sleep #{j[:run_time]}")
+        job.add_task Task.new("sleep", ["#{j[:run_time]}"])
       end
       # Parse submission time
       {:job => job, :submit_time => j[:submit_time]}
@@ -201,17 +201,19 @@ end
 
 module WorkloadRunner
   # Really executes it
-  def run(merged_batch)
+  def run(merged_batch, logger=nil)
     total_jobs = jobs_left = merged_batch.map{|b|b[:batch].size}.reduce(:+)
     # Execute
     dispatcher_uri = CHT_Configuration::Address::druby_uri(CHT_Configuration::Address::DISPATCHER)
-    client_logger = Logger.new(STDERR)
-    client_logger.level = CHT_Configuration::LOGGER_LEVEL
-    client = Client.new(dispatcher_uri, [], client_logger)
+    if logger == nil
+      logger = Logger.new(STDERR)
+      logger.level = CHT_Configuration::LOGGER_LEVEL
+    end
+    client = Client.new(dispatcher_uri, logger)
     client.register
     client.start
     merged_batch.each do |b|
-      client_logger.debug "Sleep for #{b[:wait_time]}"
+      logger.debug "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
 
       # Convert deadline to real world time
@@ -221,10 +223,12 @@ module WorkloadRunner
       # Run!!
       client.submit_jobs(b[:batch])
       jobs_left -= b[:batch].size
-      client_logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
+      logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
     end
     client.wait_all
-    return Hash.new.merge(client.submitted_jobs), client.finish_time
+    return {:jobs => Hash.new.merge(client.submitted_jobs),
+            :finish_time=>client.finish_time,
+            :submit_time=>client.submit_time}
   end
   module_function :run
 end

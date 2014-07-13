@@ -73,7 +73,6 @@ class Dispatcher::ScheduleManager
     @job_list = job_list
     @decision_maker = arg[:decision_maker]
     @status_checker = arg[:status_checker]
-    @on_schedule_callback = arg[:on_schedule]
     return
   end
 
@@ -99,23 +98,8 @@ class Dispatcher::ScheduleManager
         workers.each{|worker| @worker_job_table[worker] = job_id}
       end
     end
-    @on_schedule_callback.call if @on_schedule_callback.respond_to? :call
     @logger.info 'Updated schedule successfully'
     @logger.debug "Current schedule: #{@job_worker_table}"
-    return
-  end
-
-  # Observer callbacks
-  def on_job_submitted(change_list)
-    @status_checker.register_job(change_list) # Must make up entry before rescheduling...
-    schedule_job
-    return
-  end
-
-  def on_job_deleted(change_list)
-    @worker_job_table.delete_if{|worker,job_id| change_list.include? job_id}
-    @logger.info "Job #{change_list} deleted, reschedule"
-    schedule_job
     return
   end
 
@@ -137,18 +121,9 @@ class Dispatcher < BaseServer
     @schedule_manager = ScheduleManager.new(@job_list,
                                             :status_checker => @status_checker,
                                             :decision_maker => @decision_maker,
-                                            :on_schedule => method(:on_reschedule),
                                             :logger => @logger)
     @job_list.subscribe(:submission, self, :on_job_submitted)
-    @job_list.subscribe(:submission, @schedule_manager, :on_job_submitted)
     @job_list.subscribe(:deletion, self, :on_job_deleted)
-    @job_list.subscribe(:deletion, @schedule_manager, :on_job_deleted)
-    return
-  end
-
-  def on_reschedule
-    @logger.debug "Ask status checker to recollect status"
-    @status_checker.collect_status
     return
   end
 
@@ -185,10 +160,11 @@ class Dispatcher < BaseServer
 end
 
 module Dispatcher::DispatcherJobListChangeCallBack
-  def on_job_submitted(_)
+  def on_job_submitted(change_list)
     @logger.debug "Current jobs: #{@job_list.keys}"
-    ## Validate zombie assignment occupations on job_list_change
-    #@status_checker.release_zombie_occupied_worker
+    @status_checker.register_job(change_list) # Must make up entry before rescheduling...
+    @schedule_manager.schedule_job
+    @status_checker.collect_status  # Validate zombie and wake up idle workers
     return
   end
 
@@ -196,13 +172,11 @@ module Dispatcher::DispatcherJobListChangeCallBack
     # Clear the entry in @job_worker_queues[job_id]
     # Release nodes first
     change_list.each do |job_id|
-      @logger.info "Unregistering #{job_id} from status checker"
       @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
-      @logger.info "Unregistering #{job_id} from status checker"
+      @logger.info "Unregistered #{job_id} from status checker"
     end
-    ## Put it here rather than in status checker for code clearance; on submit and on delete should be paired.
-    #@status_checker.release_zombie_occupied_worker
-    ## P.S. Release_zombie may check before it assigned, but nevermind, periodic check can resolve it.
+    @schedule_manager.schedule_job
+    @status_checker.collect_status  # Validate zombie and wake up idle workers
     return
   end
 end
