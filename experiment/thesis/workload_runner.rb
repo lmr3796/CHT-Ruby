@@ -52,6 +52,7 @@ if(f = ARGV.shift)
     exit(-1)
   end
 end
+$options[:input] ||= $stdin
 $options[:output] ||= $stdout
 
 $options[:logger] = Logger.new(STDERR)
