@@ -78,7 +78,7 @@ class Task
     return
   end
 
-  def run()
+  def run(args = {})
     start = Time.now
     # Should use wait_thr instead of $?; $? not working when using DRb
     cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3(@cmd, *@args)  #TODO: Possible with a chroot?
