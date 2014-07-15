@@ -62,7 +62,7 @@ status_checker = DRbObject.new_with_uri status_checker_druby_uri
 dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
 dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
 
-worker = Worker.new(options[:name],
+worker = SimulatedHeterogeneousWorker.new(options[:name],
                     :logger=>logger,
                     :status_checker=>status_checker,
                     :dispatcher=>dispatcher

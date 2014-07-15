@@ -118,3 +118,53 @@ class TaskResult
     return
   end
 end
+
+class SleepTask < Task
+  attr_accessor :id, :job_id
+
+  def initialize(sleep_time)
+    @sleep_time = sleep_time
+    return
+  end
+
+  def cmd()
+    return "sleep"
+  end
+
+  def args()
+    return [@sleep_time]
+  end
+
+  def run(args={})
+    if args.has_key? :actual_sleep_time_computer
+      sleep_time = args[:actual_sleep_time_computer].call(@sleep_time.to_f)
+    else
+      sleep_time = @sleep_time
+    end
+
+    start = Time.now
+    # Should use wait_thr instead of $?; $? not working when using DRb
+    cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3(cmd, sleep_time.to_s)  #TODO: Possible with a chroot?
+    stdout = cmd_stdout.readlines.join('')
+    stderr = cmd_stderr.readlines.join('')
+    status = wait_thr.value
+    cmd_stdin.close
+    cmd_stdout.close
+    cmd_stderr.close
+    run_time = Time.now - start
+    return TaskResult.new(@id, @job_id, run_time, status, stdout, stderr)
+  end
+
+  def marshal_dump()
+    [@id, @job_id, @sleep_time]
+  end
+
+  def marshal_load(array)
+    @id, @job_id, @sleep_time = array
+  end
+
+  def eql?(rhs)
+    return false unless rhs.is_a? Task
+    return marshal_dump().eql?(rhs.marshal_dump())
+  end
+end
