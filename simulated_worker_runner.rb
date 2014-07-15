@@ -37,6 +37,9 @@ OptionParser.new do |opts|
   end
 
   # TODO: parse the arguments of distribution of actual sleeping time
+  opts.on('-a simulation-argument', '--simulation-argument simulation_argument', 'Specify the argument for simulating heterogeneous environment') do |arg|
+    options[:simulation_argument] = arg
+  end
 
 end.parse!
 
@@ -45,6 +48,7 @@ options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
 options[:status_checker_address] = "druby://#{options[:status_checker_address]}" if options[:status_checker_address]
 options[:dispatcher_address] = "druby://#{options[:dispatcher_address]}" if options[:dispatcher_address]
 # TODO: set the default value of the arguments of distribution of actual sleeping time
+options[:simulation_argument] ||= 0
 
 
 if !ARGV.empty?
@@ -65,8 +69,9 @@ dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
 worker = SimulatedHeterogeneousWorker.new(options[:name],
                     :logger=>logger,
                     :status_checker=>status_checker,
-                    :dispatcher=>dispatcher
+                    :dispatcher=>dispatcher,
                     # TODO: pass the arguments of distribution of actual sleeping time
+                    :simulation_argument=>options[:simulation_argument]
                    )
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service worker_druby_uri, worker

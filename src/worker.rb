@@ -316,10 +316,12 @@ class Worker::ClearResultRequest
   end
 end
 
+# only work with SleepTask
 class SimulatedHeterogeneousWorker < Worker
   def initialize(name, args={})
     super
-    # TODO: recognize the arguments of the distribution of actual sleeping time
+    # TODO: receive the arguments of the distribution of actual sleeping time
+    @argument = args[:simulation_argument].to_f
   end
 
   def run_task(task)
@@ -328,7 +330,9 @@ class SimulatedHeterogeneousWorker < Worker
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
     sleep_time_computer = Proc.new do |time|
       # TODO: compute the actual sleeping time on this worker
-      2 * time
+      result = (1 + Random.rand(@argument)) * time
+      @logger.info "Given sleep time: #{time}. Actual sleep time: #{result}"
+      result
     end
     result = task.run(:actual_sleep_time_computer=>sleep_time_computer)
     log_running_time(result.job_id, result.run_time)
