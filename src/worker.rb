@@ -192,6 +192,8 @@ class Worker < BaseServer
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
           Thread.current[:task] = Thread.current[:client_id] = nil
           result = run_task(task)
+          log_running_time(result.job_id, result.run_time)
+          @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
           @result_manager.add_result(client_id, result)
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
                                                                           :worker => @name,
@@ -224,8 +226,6 @@ class Worker < BaseServer
     @logger.debug "#{task.job_id}[#{task.id}] running."
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
     result = task.run
-    log_running_time(result.job_id, result.run_time)
-    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     return result
   end
 
@@ -313,5 +313,40 @@ class Worker::ClearResultRequest
         end
       } # TODO Higher efficiency?
     end
+  end
+end
+
+# only work with SleepTask
+class SimulatedHeterogeneousWorker < Worker
+  def initialize(name, args={})
+    super
+    # TODO: receive the arguments of the distribution of actual sleeping time
+    @argument = args[:simulation_argument]
+    raise ArgumentError if not @argument.is_a? Float
+  end
+
+  # TODO: Change this model
+  def additional_sleep_time(task)
+    sleep_time = task.args[0].to_f
+    return Random.rand(@argument) * sleep_time
+  end
+
+  def run_task(task)
+    @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
+    @logger.debug "#{task.job_id}[#{task.id}] running."
+    @logger.debug "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
+
+    # Additional sleep to simulate
+    hetero_time = additional_sleep_time(task)
+    @logger.info "Sleep for an additional #{hetero_time} seconds"
+    sleep hetero_time
+
+    # Execution
+    result = super(task)
+
+    # Synthesizing the result
+    result.run_time += hetero_time
+
+    return result
   end
 end
