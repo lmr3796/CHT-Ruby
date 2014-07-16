@@ -328,13 +328,17 @@ class SimulatedHeterogeneousWorker < Worker
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     @logger.debug "#{task.job_id}[#{task.id}] running."
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
-    sleep_time_computer = Proc.new do |time|
-      # TODO: compute the actual sleeping time on this worker
-      result = (1 + Random.rand(@argument)) * time
-      @logger.info "Given sleep time: #{time}. Actual sleep time: #{result}"
-      result
+
+    if task.is_a? SleepTask
+      sleep_time = task.args[0].to_f
+      # TODO: compute the additional sleep time
+      additional_sleep_time = Random.rand(@argument) * sleep_time
+      @logger.info "Sleep for an additional #{additional_sleep_time} seconds"
+      cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3("sleep", additional_sleep_time.to_s)
+      wait_thr.value
     end
-    result = task.run(:actual_sleep_time_computer=>sleep_time_computer)
+
+    result = task.run
     log_running_time(result.job_id, result.run_time)
     @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     return result
