@@ -37,7 +37,7 @@ OptionParser.new do |opts|
   end
 
   # TODO: parse the arguments of distribution of actual sleeping time
-  opts.on('-a simulation-argument', '--simulation-argument simulation_argument', 'Specify the argument for simulating heterogeneous environment') do |arg|
+  opts.on('-a simulation-argument', '--simulation-argument simulation_argument', Float, 'Specify the argument for simulating heterogeneous environment') do |arg|
     options[:simulation_argument] = arg
   end
 
@@ -48,7 +48,7 @@ options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
 options[:status_checker_address] = "druby://#{options[:status_checker_address]}" if options[:status_checker_address]
 options[:dispatcher_address] = "druby://#{options[:dispatcher_address]}" if options[:dispatcher_address]
 # TODO: set the default value of the arguments of distribution of actual sleeping time
-options[:simulation_argument] ||= 0
+options[:simulation_argument] ||= 0.0
 
 
 if !ARGV.empty?

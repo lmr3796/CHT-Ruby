@@ -321,7 +321,8 @@ class SimulatedHeterogeneousWorker < Worker
   def initialize(name, args={})
     super
     # TODO: receive the arguments of the distribution of actual sleeping time
-    @argument = args[:simulation_argument].to_f
+    @argument = args[:simulation_argument]
+    raise ArgumentError if not @argument.is_a? Float
   end
 
   # TODO: Change this model
