@@ -1,4 +1,5 @@
 require 'atomic'
+require 'open3'
 
 class Job
   attr_reader :task
@@ -107,7 +108,8 @@ class Task
 end
 
 class TaskResult
-  attr_reader :task_id, :job_id, :run_time, :status, :stdout, :stderr
+  attr_reader :task_id, :job_id, :status, :stdout, :stderr
+  attr_accessor :run_time
   def initialize(task_id, job_id, run_time, status, stdout, stderr)
     @task_id = task_id
     @job_id = job_id
@@ -116,5 +118,46 @@ class TaskResult
     @stdout = stdout
     @stderr = stderr
     return
+  end
+end
+
+class SleepTask < Task
+  def self.get_synthesized_success_status
+    _1, _2, _3, wait_thr = Open3.popen3('sleep 0')
+    return wait_thr.value
+  end
+  private_class_method :get_synthesized_success_status
+
+  SUCCESS_STATUS = get_synthesized_success_status
+
+  def initialize(sleep_time)
+    @sleep_time = sleep_time
+    return
+  end
+
+  def cmd()
+    return "sleep"
+  end
+
+  def args()
+    return [@sleep_time]
+  end
+
+  def run()
+    sleep @sleep_time
+    return TaskResult.new(@id, @job_id, @sleep_time, SUCCESS_STATUS, '', '') # Synthesized one
+  end
+
+  def marshal_dump()
+    [@id, @job_id, @sleep_time]
+  end
+
+  def marshal_load(array)
+    @id, @job_id, @sleep_time = array
+  end
+
+  def eql?(rhs)
+    return false unless rhs.is_a? Task
+    return marshal_dump().eql?(rhs.marshal_dump())
   end
 end
