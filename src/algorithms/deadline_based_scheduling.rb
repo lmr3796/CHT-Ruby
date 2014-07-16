@@ -44,9 +44,10 @@ module SchedulingAlgorithm
         return 0, 0
       end
 
-      @logger.info "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
+      @logger.debug "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
       # If the deadline is already passed, assign as many as workers for the job.
       if current_timestamp > job.deadline
+        @logger.warn "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
         @logger.warn "#{job_id} missed deadline; give as much as possble"
         return 0, [worker_by_throughput.size, job.task_remaining].min
       end
@@ -63,19 +64,19 @@ module SchedulingAlgorithm
         # Try to estimate run time then get workers to occupy
         if job.task_running_time_on_worker[worker_id] != nil
           estimated_running_time = job.task_running_time_on_worker[worker_id]
-          @logger.info "Estimate run time using provided runtime = #{estimated_running_time} sec."
+          @logger.debug "Estimate run time using provided runtime = #{estimated_running_time} sec."
         elsif job.avg_task_running_time != nil && job.avg_task_running_time > 0
-          @logger.info "Estimate run time using average task execution time = #{job.avg_task_running_time} sec."
+          @logger.debug "Estimate run time using average task execution time = #{job.avg_task_running_time} sec."
           estimated_running_time = job.avg_task_running_time
         else
           all = worker_avg_running_time.values.flatten
           avg = all / all.size rescue nil
           if avg != nil && avg > 0
             estimated_running_time = avg
-            @logger.info "Estimate run time using system average = #{estimated_running_time} sec."
+            @logger.debug "Estimate run time using system average = #{estimated_running_time} sec."
           else
             estimated_running_time = INTIAL_EXEC_TIME_GUESS
-            @logger.info "Estimate run time using default value = #{estimated_running_time} sec."
+            @logger.debug "Estimate run time using default value = #{estimated_running_time} sec."
           end
         end
         total_throughput += 1.0 / estimated_running_time
