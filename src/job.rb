@@ -1,4 +1,5 @@
 require 'atomic'
+require 'open3'
 
 class Job
   attr_reader :task
@@ -107,7 +108,8 @@ class Task
 end
 
 class TaskResult
-  attr_reader :task_id, :job_id, :run_time, :status, :stdout, :stderr
+  attr_reader :task_id, :job_id, :status, :stdout, :stderr
+  attr_accessor :run_time
   def initialize(task_id, job_id, run_time, status, stdout, stderr)
     @task_id = task_id
     @job_id = job_id
@@ -120,7 +122,13 @@ class TaskResult
 end
 
 class SleepTask < Task
-  attr_accessor :id, :job_id
+  def self.get_synthesized_success_status
+    _1, _2, _3, wait_thr = Open3.popen3('sleep 0')
+    return wait_thr.value
+  end
+  private_class_method :get_synthesized_success_status
+
+  SUCCESS_STATUS = get_synthesized_success_status
 
   def initialize(sleep_time)
     @sleep_time = sleep_time
@@ -136,17 +144,8 @@ class SleepTask < Task
   end
 
   def run()
-    start = Time.now
-    # Should use wait_thr instead of $?; $? not working when using DRb
-    cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3(cmd, @sleep_time.to_s)  #TODO: Possible with a chroot?
-    stdout = cmd_stdout.readlines.join('')
-    stderr = cmd_stderr.readlines.join('')
-    status = wait_thr.value
-    cmd_stdin.close
-    cmd_stdout.close
-    cmd_stderr.close
-    run_time = Time.now - start
-    return TaskResult.new(@id, @job_id, run_time, status, stdout, stderr)
+    sleep @sleep_time
+    return TaskResult.new(@id, @job_id, @sleep_time, SUCCESS_STATUS, '', '') # Synthesized one
   end
 
   def marshal_dump()

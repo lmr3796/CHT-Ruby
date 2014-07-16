@@ -192,6 +192,8 @@ class Worker < BaseServer
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
           Thread.current[:task] = Thread.current[:client_id] = nil
           result = run_task(task)
+          log_running_time(result.job_id, result.run_time)
+          @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
           @result_manager.add_result(client_id, result)
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
                                                                           :worker => @name,
@@ -224,8 +226,6 @@ class Worker < BaseServer
     @logger.debug "#{task.job_id}[#{task.id}] running."
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
     result = task.run
-    log_running_time(result.job_id, result.run_time)
-    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     return result
   end
 
@@ -324,23 +324,28 @@ class SimulatedHeterogeneousWorker < Worker
     @argument = args[:simulation_argument].to_f
   end
 
+  # TODO: Change this model
+  def additional_sleep_time(task)
+    sleep_time = task.args[0].to_f
+    return Random.rand(@argument) * sleep_time
+  end
+
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     @logger.debug "#{task.job_id}[#{task.id}] running."
-    @logger.info "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
+    @logger.debug "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
 
-    if task.is_a? SleepTask
-      sleep_time = task.args[0].to_f
-      # TODO: compute the additional sleep time
-      additional_sleep_time = Random.rand(@argument) * sleep_time
-      @logger.info "Sleep for an additional #{additional_sleep_time} seconds"
-      cmd_stdin, cmd_stdout, cmd_stderr, wait_thr = Open3.popen3("sleep", additional_sleep_time.to_s)
-      wait_thr.value
-    end
+    # Additional sleep to simulate
+    hetero_time = additional_sleep_time(task)
+    @logger.info "Sleep for an additional #{hetero_time} seconds"
+    sleep hetero_time
 
-    result = task.run
-    log_running_time(result.job_id, result.run_time)
-    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
+    # Execution
+    result = super(task)
+
+    # Synthesizing the result
+    result.run_time += hetero_time
+
     return result
   end
 end
