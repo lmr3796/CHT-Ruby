@@ -51,7 +51,7 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
-    return if !arg.has_key? :update_period
+    return if arg[:update_period] == nil
 
     # Register periodic check
     raise ArgumentError if !arg[:update_period].is_a? Numeric
