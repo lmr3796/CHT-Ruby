@@ -89,13 +89,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     job_done(job_id) if !@results[job_id].include? nil
 
     # Notified to retrieve but not found, mark as lost
-    raise ResultLostError if @results[job_id][task_id] == nil
+    raise ResultLostError if @results[job_id][task_id] == nil # TODO: more detection
     return
   rescue ResultLostError
-    # FIXME try to handle this
-    raise NotImplementedError
-    logger.error "Result of #{job_id}[#{task_id}] missing, ask to redo"
-    redo_task(task_id, job_id)
+    on_result_lost
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
@@ -261,5 +258,12 @@ class Client
     @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
     @dispatcher.redo_task(job_id)
     return
+  end
+
+  def on_result_lost(job_id, task_id)
+    # FIXME try to handle this
+    raise NotImplementedError
+    @logger.error "Result of #{job_id}[#{task_id}] missing, ask to redo"
+    redo_task(task_id, job_id)
   end
 end
