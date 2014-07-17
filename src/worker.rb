@@ -316,19 +316,25 @@ class Worker::ClearResultRequest
   end
 end
 
-# only work with SleepTask
 class SimulatedHeterogeneousWorker < Worker
+  attr_accessor :argument
+
   def initialize(name, args={})
     super
     # TODO: receive the arguments of the distribution of actual sleeping time
-    @argument = args[:simulation_argument]
-    raise ArgumentError if not @argument.is_a? Float
+    self.argument = args[:simulation_argument]
+  end
+
+  def argument=(a)
+    raise ArgumentError if !a.is_a? Numeric
+    @argument = a
   end
 
   # TODO: Change this model
   def additional_sleep_time(task)
-    sleep_time = task.args[0].to_f
-    return Random.rand(@argument) * sleep_time
+    raise ArgumentError if !task.is_a? Task
+    return 0.0 if !task.is_a? SleepTask
+    return Random.rand(@argument) * task.sleep_time
   end
 
   def run_task(task)

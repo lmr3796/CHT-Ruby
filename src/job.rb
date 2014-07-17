@@ -122,6 +122,7 @@ class TaskResult
 end
 
 class SleepTask < Task
+  attr_reader :sleep_time
   def self.get_synthesized_success_status
     _1, _2, _3, wait_thr = Open3.popen3('sleep 0')
     return wait_thr.value
