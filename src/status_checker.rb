@@ -30,6 +30,21 @@ class StatusChecker < BaseServer
     return @worker_server_table[worker].instance_variable_get("@uri")
   end
 
+  def register_periodic_check
+    @periodic_check_thread = Thread.new{EventMachine.run}
+    EventMachine.add_periodic_timer(arg[:update_period]) do
+      @logger.info "Periodically collecting status and rescheduling"
+      collect_status
+      begin
+        @logger.info 'Asked to reschedule'
+        @dispatcher.reschedule
+      rescue DRbConnError
+        @logger.error "Error contacting dispatcher for reschedule"
+      end
+    end
+  end
+  private :register_periodic_check
+
   def initialize(worker_table={},arg={})
     super arg[:logger]
     # TODO: make up a worker table
@@ -40,22 +55,7 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
-    if arg[:update_period]
-      Thread.new do
-        EventMachine.run do
-          EventMachine.add_periodic_timer(arg[:update_period]) do
-            @logger.info "Periodically collecting status and rescheduling"
-            collect_status
-            begin
-              @logger.info 'Asked to reschedule'
-              @dispatcher.reschedule
-            rescue DRbConnError
-              @logger.error "Error contacting dispatcher for reschedule"
-            end
-          end
-        end
-      end
-    end
+    register_periodic_check if arg[:update_period]
     return
   end
 
