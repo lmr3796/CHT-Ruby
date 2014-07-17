@@ -9,7 +9,7 @@ require_relative 'job'
 require_relative 'message_service'
 require_relative 'common/rwlock_hash'
 
-class ResultLostError; end
+class ResultLostError < RuntimeError; end
 
 # TODO: Reimplement this with mixin polymorphism!
 module ClientMessageHandler include MessageService::Client::MessageHandler
