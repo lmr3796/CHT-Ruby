@@ -283,35 +283,34 @@ class Worker::TaskResultManager
 end
 
 class Worker::ClearResultRequest
-  class NoJobToDeleteError < ArgumentError; end
-  attr_reader :client_id, :to_delete
+  attr_reader :client_id, :task_id_to_delete, :job_id
   ALL = :ALL
-  def initialize(client_id, delete_table)
+  def initialize(job_id, delete_list, client_id)
+    @job_id = job_id
     @client_id = client_id
-    self.to_delete = delete_table
+    self.task_id_to_delete = delete_list
   end
 
-  def to_delete=(delete_table)
-    raise ArgumentError if !delete_table.is_a? Hash
-    raise NoJobToDeleteError, 'No jobs to delete' if delete_table.values.empty?
-
-    delete_table.values.
-      reject{|e| e == ALL || e.is_a?(Array)}.size == 0 or raise ArgumentError
-    @to_delete = delete_table
+  def task_id_to_delete=(delete_list)
+    raise ArgumentError if !delete_list.is_a? Enumerable || delete_list == ALL
+    raise ArgumentError, 'No jobs to delete' if delete_list.empty?
+    @task_id_to_delete = delete_list
   end
 
   # Command Pattern
   def execute(task_result, job_id_by_client, logger)
-    @to_delete.select{|job_id,_|job_id_by_client[@client_id].include? job_id}.each do |job_id, t_id_list|
-      task_result[job_id] == [] and next if t_id_list == ALL
-      task_result[job_id].reject!{|r|
-        if t_id_list.include? r.task_id
-          logger.debug "#{job_id}[#{r.task_id}] deleted."
-          true
-        else
-          false
-        end
-      } # TODO Higher efficiency?
+    if !job_id_by_client[@client_id].include? @job_id
+      logger.warn "Invalid clear request that #{@client_id} to delete #{@job_id}"
+      return
+    end
+    task_result[job_id] == [] and return if @task_id_to_delete == ALL
+    task_result[job_id].reject! do |r|
+      if @task_id_to_delete.include? r.task_id
+        logger.debug "#{job_id}[#{r.task_id}] deleted."
+        true
+      else
+        false
+      end
     end
   end
 end

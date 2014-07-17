@@ -78,12 +78,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
-    to_delete = {}
-    @results.each do |j_id, res_list|
-      obtained_tasks = res_list.each_index.select{|i|res_list[i] != nil}
-      to_delete[j_id] = obtained_tasks unless obtained_tasks.empty?
-    end
-    clear_request = Worker::ClearResultRequest.new(@uuid, to_delete)
+    clear_request = Worker::ClearResultRequest.new(job_id,
+                                                   @results[job_id].each_with_index.select{|i|@results[job_id] != nil},
+                                                   @uuid
+                                                  )
     worker_server.clear_result(clear_request)
     @logger.info "Deleted obtained results of #{job_id} on worker #{worker}"
 
