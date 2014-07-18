@@ -1,5 +1,5 @@
 require 'drb'
-require 'eventmachine'
+require 'timers'
 
 require_relative 'base_server'
 require_relative 'worker'
@@ -30,6 +30,17 @@ class StatusChecker < BaseServer
     return @worker_server_table[worker].instance_variable_get("@uri")
   end
 
+  def periodic_check()
+    @logger.info "Periodically collecting status and rescheduling"
+    collect_status
+    @logger.info 'Asked to reschedule'
+    @dispatcher.reschedule
+    return
+  rescue DRbConnError
+    @logger.error "Error contacting dispatcher for reschedule"
+  end
+  private :periodic_check
+
   def initialize(worker_table={},arg={})
     super arg[:logger]
     # TODO: make up a worker table
@@ -40,22 +51,13 @@ class StatusChecker < BaseServer
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
     collect_status
-    if arg[:update_period]
-      Thread.new do
-        EventMachine.run do
-          EventMachine.add_periodic_timer(arg[:update_period]) do
-            @logger.info "Periodically collecting status and rescheduling"
-            collect_status
-            begin
-              @logger.info 'Asked to reschedule'
-              @dispatcher.reschedule
-            rescue DRbConnError
-              @logger.error "Error contacting dispatcher for reschedule"
-            end
-          end
-        end
-      end
-    end
+    return if arg[:update_period] == nil
+
+    # Register periodic check
+    raise ArgumentError if !arg[:update_period].is_a? Numeric
+    timer_group = Timers::Group.new
+    @periodic_checker = timer_group.every(arg[:update_period]){periodic_check} and
+      Thread.new(timer_group){|t|loop{t.wait}}
     return
   end
 

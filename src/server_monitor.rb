@@ -1,5 +1,5 @@
 module ServerStatusChecking
-  def alive
+  def alive?
     return true
   end
   def coordination

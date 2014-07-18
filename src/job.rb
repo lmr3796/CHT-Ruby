@@ -91,6 +91,10 @@ class Task
     cmd_stderr.close
     run_time = Time.now - start
     return TaskResult.new(@id, @job_id, run_time, status, stdout, stderr)
+  rescue Interrupt, SystemExit
+    wait_thr.kill
+    wait_thr.join
+    raise
   end
 
   def marshal_dump()
@@ -122,6 +126,7 @@ class TaskResult
 end
 
 class SleepTask < Task
+  attr_reader :sleep_time
   def self.get_synthesized_success_status
     _1, _2, _3, wait_thr = Open3.popen3('sleep 0')
     return wait_thr.value

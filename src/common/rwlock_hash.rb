@@ -48,7 +48,6 @@ class ReadWriteLockHash < Hash
     return @rwlock.with_write_lock{super(*args)}
   end
 
-
   def rwlock=(rwlock)
     rwlock.is_a? ReadWriteLock or raise ArgumentError
     @rwlock = rwlock

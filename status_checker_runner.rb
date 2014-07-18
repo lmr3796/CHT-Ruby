@@ -12,8 +12,11 @@ require_relative 'config/config'
 
 
 # Parsing Arguments zzz....
-options = {}
+options = {:periodic=>true} # Default arguments
 OptionParser.new do |opts|
+  opts.on("--[no-]periodic-checking", "Enable/disable periodic checking. Enables by default.") do |v|
+    options[:periodic] = v
+  end
 
   # Specify the port to listen
   opts.on('-p port', '--port port', 'Specify port to use') do |port|
@@ -36,13 +39,20 @@ if !ARGV.empty?
   exit(false)
 end
 
-# Initiate and run the worker as a DRb object
+# Initiate the workers as DRb objects
 logger = Logger.new(STDERR)
 logger.level = CHT_Configuration::LOGGER_LEVEL
 workers = Hash[CHT_Configuration::Address::WORKERS.map{|n,addr| [n, DRbObject.new_with_uri(CHT_Configuration::Address::druby_uri(addr))]}]
 dispatcher = DRbObject.new_with_uri options[:dispatcher_addr]
-status_checker = StatusChecker.new workers, :dispatcher => dispatcher, :update_period => CHT_Configuration::STATUS_CHECKER_UPDATE_PERIOD, :logger=>logger
+status_checker = StatusChecker.new(workers,
+                                   :dispatcher => dispatcher,
+                                   :logger=>logger,
+                                   :update_period =>(options[:periodic] ?
+                                                     CHT_Configuration::STATUS_CHECKER_UPDATE_PERIOD :
+                                                     nil)
+                                  )
 
+# Run the server
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, status_checker
 $stderr.puts "Running on #{druby_uri}..."
