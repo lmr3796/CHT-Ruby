@@ -53,5 +53,5 @@ dispatcher = Dispatcher.new :status_checker => status_checker, :decision_maker =
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, dispatcher 
-$stderr.puts "Running on #{druby_uri}..."
+logger.info "Running on #{druby_uri}..."
 DRb.thread.join

@@ -53,5 +53,5 @@ decision_maker = DecisionMaker.new algorithm, status_checker, :logger=>logger
 
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, decision_maker
-$stderr.puts "Running on #{druby_uri}..."
+logger.info "Running on #{druby_uri}..."
 DRb.thread.join

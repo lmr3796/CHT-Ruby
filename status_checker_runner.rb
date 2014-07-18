@@ -55,5 +55,6 @@ status_checker = StatusChecker.new(workers,
 # Run the server
 druby_uri = CHT_Configuration::Address::druby_uri(:address => '', :port => options[:port])
 DRb.start_service druby_uri, status_checker
-$stderr.puts "Running on #{druby_uri}..."
+logger.info "Running on #{druby_uri}..."
+status_checker.register
 DRb.thread.join

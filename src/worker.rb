@@ -51,10 +51,17 @@ class Worker < BaseServer
     @logger.debug "Notifies status checker for coming"
     @status_checker.register_worker @name
     return
-  rescue => e
-    @logger.error "Error registering worker"
-    @logger.error e.message
-    @logger.error e.backtrace.join("\n")
+  rescue DRb::DRbConnError
+    @logger.error "Error reaching the management system on registration."
+    @status = STATUS::AVAILABLE   # Mark as available by itself if fail on registration
+    @logger.warn "Mark status as AVAILABLE by self."
+  end
+
+  def fetch_assignment
+    return @dispatcher.on_worker_available(@name)
+  rescue DRb::DRbConnError
+    @logger.error "Can't reach dispatcher to fetch assignment."
+    return nil
   end
 
   def status=(s)
@@ -68,7 +75,7 @@ class Worker < BaseServer
     # Refactor this to a callback table if necessary; currently not.
     case s
     when STATUS::AVAILABLE
-      @dispatcher.on_worker_available(@name)
+      fetch_assignment
     end
     return s
   end
@@ -77,7 +84,7 @@ class Worker < BaseServer
     return @assignment.value
   end
 
-  # Should only be invoked while on_worker_available, so there
+  # Should only be invoked while Dispatcher#on_worker_available, so there
   # shouldn't be any race condition here.
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
@@ -111,8 +118,8 @@ class Worker < BaseServer
   def awake                         # AVAILABLE ONLY
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
     @logger.debug "Awoken to fetch new assignment"
-    next_job_assigned = @dispatcher.on_worker_available(@name)
-    @logger.debug "Fetched #{next_job_assigned.inspect}"
+    next_job_assigned = fetch_assignment
+    @logger.debug "Fetched #{next_job_assigned.inspect}" if next_job_assigned != nil
     return
   end
 
@@ -124,6 +131,8 @@ class Worker < BaseServer
       @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
       Thread::main.raise(InvalidAssignmentError)
     return valid
+  rescue DRb::DRbConnError
+    @logger.error "Can't reach dispatcher to validate assignment."
   end
 
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED

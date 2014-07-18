@@ -52,11 +52,16 @@ class StatusChecker < BaseServer
     @dispatcher = arg[:dispatcher]
     timer_group = Timers::Group.new
     @periodic_checker = timer_group.every(arg[:update_period] || 1){periodic_check}
-    @periodic_checker.fire
-    return if arg[:update_period] == nil
+    @update_period = arg[:update_period]
+    raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
+    return
 
-    raise ArgumentError if !arg[:update_period].is_a? Numeric
-    Thread.new(timer_group){|t|loop{t.wait}}
+  end
+
+  def register
+    raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
+    Thread.new(timer_group){|t|loop{t.wait}} if @update_period != nil
+    @periodic_checker.fire
     return
   end
 
@@ -164,16 +169,16 @@ module StatusChecker::WorkerInterface
         @logger.info 'Asked to reschedule'
         @dispatcher.reschedule
       rescue DRb::DRbConnError => e
-        @logger.error "Error reaching dispatcher"
-        @logger.debug e.message
-        @logger.debug e.backtrace.join("\n")
+        @logger.error "Error reaching dispatcher for rescheduling"
+        @logger.error e.message
+        @logger.error e.backtrace.join("\n")
       end
       @worker_server_table[worker].status = Worker::STATUS::AVAILABLE
     rescue DRb::DRbConnError => e
+      @logger.error "Can't reach worker, is your DRb service running?"
       @logger.error "Error reaching the registering worker #{worker}"
-      @logger.debug e.message
-      @logger.debug e.backtrace.join("\n")
-      raise "Can't reach worker, is your DRb service running?"
+      @logger.error e.message
+      @logger.error e.backtrace.join("\n")
     end
     return
   end

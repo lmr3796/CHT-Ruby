@@ -75,7 +75,7 @@ worker = SimulatedHeterogeneousWorker.new(options[:name],
                    )
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 DRb.start_service worker_druby_uri, worker
-$stderr.puts "Worker #{options[:name]} running on #{worker_druby_uri}..."
+logger.info "Worker #{options[:name]} running on #{worker_druby_uri}..."
 begin
   worker.register # Must registier only after service started
 rescue DRb::DRbConnError

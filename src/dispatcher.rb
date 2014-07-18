@@ -79,18 +79,28 @@ class Dispatcher::ScheduleManager
   def schedule_job()
     @logger.info 'Updating schedule'
     @lock.with_write_lock do
-      job_running_time = @status_checker.job_running_time
-      worker_avg_running_time = @status_checker.worker_avg_running_time
-      cloned_job_list = Hash.new.merge(@job_list)
-      workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
+      begin
+        job_running_time = @status_checker.job_running_time
+        worker_avg_running_time = @status_checker.worker_avg_running_time
+        cloned_job_list = Hash.new.merge(@job_list)
+        workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
+      rescue DRb::DRbConnError
+        @logger.error "Error reaching status checker when scheduling"
+        raise
+      end
 
-      # Schedule result:  {job_id => [worker1, worker2...]}
-      @job_worker_table = @decision_maker.schedule_job(
-        cloned_job_list,
-        workers_alive, # Don't schedule on downed workers
-        :job_running_time=>job_running_time,
-        :worker_avg_running_time => worker_avg_running_time
-      )
+      begin
+        # Schedule result:  {job_id => [worker1, worker2...]}
+        @job_worker_table = @decision_maker.schedule_job(
+          cloned_job_list,
+          workers_alive, # Don't schedule on downed workers
+          :job_running_time=>job_running_time,
+          :worker_avg_running_time => worker_avg_running_time
+        )
+      rescue DRb::DRbConnError
+        @logger.error "Error reaching decision maker when scheduling"
+        raise
+      end
 
       @worker_job_table = ReadWriteLockHash.new
       @job_worker_table.keys.each do |job_id|
@@ -100,6 +110,7 @@ class Dispatcher::ScheduleManager
     end
     @logger.info 'Updated schedule successfully'
     @logger.debug "Current schedule: #{@job_worker_table}"
+  ensure
     return
   end
 
