@@ -190,7 +190,6 @@ class Worker < BaseServer
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          Thread.current[:task] = Thread.current[:client_id] = nil
           result = run_task(task)
           log_running_time(result.job_id, result.run_time)
           @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
@@ -199,6 +198,7 @@ class Worker < BaseServer
                                                                           :worker => @name,
                                                                           :job_id => task.job_id,
                                                                           :task_id => task.id))
+          Thread.current[:task] = Thread.current[:client_id] = nil
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
 
         rescue Timeout::Error
@@ -244,6 +244,16 @@ class Worker < BaseServer
     @status_checker.log_running_time(job_id, time)
     return
   end
+
+  def current_execution_of(client_id)
+    return Thread.exclusive do
+      client_id != Thread::main[:client_id] ? nil : [Thread::main[:task].job_id, Thread::main[:task].id]
+    end
+  end
+
+  def exist_result?(job_id, task_id, client_id)
+    @result_manager.exist_result?(job_id, task_id, client_id)
+  end
 end
 
 class Worker::TaskResultManager
@@ -279,6 +289,14 @@ class Worker::TaskResultManager
       clear_request.execute(@task_result, @job_id_by_client, logger)
     end
     return
+  end
+
+  def exist_result?(job_id, task_id, client_id)
+    @rwlock.with_read_lock do
+      return false if @job_id_by_client[client_id] == nil
+      return false if !@job_id_by_client[client_id].include? job_id
+      return @task_result[job_id].any?{|r| r.task_id == task_id}
+    end
   end
 end
 

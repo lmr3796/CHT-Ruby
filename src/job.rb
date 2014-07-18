@@ -91,6 +91,10 @@ class Task
     cmd_stderr.close
     run_time = Time.now - start
     return TaskResult.new(@id, @job_id, run_time, status, stdout, stderr)
+  rescue Interrupt, SystemExit
+    wait_thr.kill
+    wait_thr.join
+    raise
   end
 
   def marshal_dump()

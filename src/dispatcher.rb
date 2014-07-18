@@ -220,7 +220,7 @@ module Dispatcher::DispatcherClientInterface
     return
   end
 
-  def task_redo(job_id)
+  def redo_task(job_id)
     @job_list[job_id].task_redo
     @logger.warn "A task of #{job_id} needs redo, reschedule"
     reschedule

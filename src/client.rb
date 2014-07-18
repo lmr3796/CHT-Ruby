@@ -2,6 +2,7 @@ require 'drb'
 require 'logger/colors'
 require 'thread'
 require 'time'
+require 'timers'
 require 'sync'
 
 require_relative 'dispatcher'
@@ -39,9 +40,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
       return
     end
 
-    # There are remaining task to execute
+    # There are task to sent. Submit it.
     if worker_server.submit_task(task, @uuid)
       @dispatcher.task_sent(job_id)
+      @execution_assignment[[job_id, task.id]] = worker_server.__drburi
       @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
     else
       # On submission rejected
@@ -75,6 +77,11 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     # Update the results
     add_results(fetched_results, job_id)
+    fetched_results.each do |r|
+      # TODO what if poller find out before this???
+      @execution_assignment.delete([job_id, r.task_id])
+      @logger.debug "Update running status of #{job_id}[#{r.task_id}]"
+    end
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
@@ -103,18 +110,20 @@ end
 class Client
   include ClientMessageHandler
   attr_reader :uuid, :results, :submit_time, :finish_time, :submitted_jobs, :rwlock
+  RESULT_POLLING_INTERVAL = 10
 
   def initialize(dispatcher_uri, logger=Logger.new(STDERR))
-    DRb.start_service
     @rwlock = ReadWriteLock.new
     @submitted_jobs = ReadWriteLockHash.new
     @task_queue = ReadWriteLockHash.new
     @job_done = ReadWriteLockHash.new
+    @execution_assignment = ReadWriteLockHash.new # maintains worker uris
     @submit_time = {}
     @finish_time = {}
     @results = {}
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @logger = logger
+    run_periodic_task_execution_checker
     return
   end
 
@@ -167,6 +176,7 @@ class Client
   end
 
   def start()
+    DRb.start_service
     @msg_service.start
     @logger.info "Running message service."
     @logger.info "Sending testing message."
@@ -203,6 +213,7 @@ class Client
       end
       @task_queue[job_id] = tq
     end
+    @rwlock.with_write_lock{@task_execution_checker.continue}   # Must make sure poller is prepared
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
     raise 'Submissiion failure' if job_id_list != jobs.keys
@@ -254,16 +265,59 @@ class Client
     return
   end
 
-  def redo_task(task_id, job_id)
-    @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
-    @dispatcher.redo_task(job_id)
-    return
+  def run_periodic_task_execution_checker
+    timer_group = Timers::Group.new
+    @task_execution_checker = timer_group.every(RESULT_POLLING_INTERVAL) do
+      missing_task = check_missing_task
+      missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
+      # Stop polling if no pending jobs
+      @rwlock.with_write_lock do
+        if done?(@submitted_jobs.keys)
+          @logger.warn "No pending jobs, no need to check for results"
+          @task_execution_checker.pause
+        end
+      end
+    end
+    @timer_thr = Thread.new(timer_group) do |t|
+      loop do
+        t.wait
+      end
+    end
+  end
+  private :run_periodic_task_execution_checker
+
+  def check_missing_task
+    missing = []
+    ass = Hash.new.merge(@execution_assignment) # each is not implemented with rwlock...
+    ass.each do |j_and_t, worker_uri|
+      job_id, task_id = j_and_t
+
+      # Workers may be failed here
+      worker_server = DRbObject.new_with_uri(worker_uri)
+
+      begin
+        missing << j_and_t if worker_server.current_execution_of(@uuid) != j_and_t &&
+          !worker_server.exist_result?(job_id, task_id, @uuid)
+      rescue DRb::DRbConnError => e
+        @logger.error "Worker is found down, take it as lost."
+        @logger.error e.message
+        missing << j_and_t
+      rescue => e
+        @logger.error e.message
+        @logger.error e.backtrace.join("\n")
+      end
+    end
+    return missing
   end
 
   def on_result_lost(job_id, task_id)
-    # FIXME try to handle this
-    raise NotImplementedError
-    @logger.error "Result of #{job_id}[#{task_id}] missing, ask to redo"
-    redo_task(task_id, job_id)
+    @logger.warn "Result of #{job_id}[#{task_id}] lost, asked to redo"
+    @execution_assignment.delete([job_id, task_id])
+    redo_task(job_id, task_id)
+  end
+
+  def redo_task(job_id, task_id)
+    @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
+    @dispatcher.redo_task(job_id)
   end
 end
