@@ -164,7 +164,7 @@ module Dispatcher::DispatcherJobListChangeCallBack
     @logger.debug "Current jobs: #{@job_list.keys}"
     @status_checker.register_job(change_list) # Must make up entry before rescheduling...
     @schedule_manager.schedule_job
-    @status_checker.collect_status  # Validate zombie and wake up idle workers
+    @status_checker.require_recollect_status  # Validate zombie and wake up idle workers
     return
   end
 
@@ -176,7 +176,7 @@ module Dispatcher::DispatcherJobListChangeCallBack
       @logger.info "Unregistered #{job_id} from status checker"
     end
     @schedule_manager.schedule_job
-    @status_checker.collect_status  # Validate zombie and wake up idle workers
+    @status_checker.require_recollect_status  # Validate zombie and wake up idle workers
     return
   end
 end
@@ -236,6 +236,10 @@ module Dispatcher::DispatcherClientInterface
     @logger.info "#{job_id} is done"
     @job_list.delete(job_id)
     return
+  end
+
+  def tell_worker_down_detected
+    @status_checker.require_recollect_status
   end
 end
 

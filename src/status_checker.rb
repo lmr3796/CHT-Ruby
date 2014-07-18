@@ -36,7 +36,7 @@ class StatusChecker < BaseServer
     @logger.info 'Asked to reschedule'
     @dispatcher.reschedule
     return
-  rescue DRbConnError
+  rescue DRb::DRbConnError
     @logger.error "Error contacting dispatcher for reschedule"
   end
   private :periodic_check
@@ -50,18 +50,23 @@ class StatusChecker < BaseServer
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
-    collect_status
+    timer_group = Timers::Group.new
+    @periodic_checker = timer_group.every(arg[:update_period] || 1){periodic_check}
+    @periodic_checker.fire
     return if arg[:update_period] == nil
 
-    # Register periodic check
     raise ArgumentError if !arg[:update_period].is_a? Numeric
-    timer_group = Timers::Group.new
-    @periodic_checker = timer_group.every(arg[:update_period]){periodic_check} and
-      Thread.new(timer_group){|t|loop{t.wait}}
+    Thread.new(timer_group){|t|loop{t.wait}}
     return
   end
 
-  def collect_status(workers=@worker_server_table.keys)
+  # The periodic interval resets if we're asked to recollect
+  def require_recollect_status
+    return @periodic_checker.fire
+  end
+
+  def collect_status()
+    workers=@worker_server_table.keys
     @logger.info "Collecting status"
     @lock.with_write_lock do
       workers.each do |w|
@@ -87,6 +92,7 @@ class StatusChecker < BaseServer
     @logger.info "Successfully collected status"
     return
   end
+  private :collect_status
 
   def release_zombie_occupied_worker(workers=@worker_server_table.keys)
     # Free occupied workers

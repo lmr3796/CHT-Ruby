@@ -269,6 +269,7 @@ class Client
     timer_group = Timers::Group.new
     @task_execution_checker = timer_group.every(RESULT_POLLING_INTERVAL) do
       missing_task = check_missing_task
+      @dispatcher.tell_worker_down_detected
       missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
       # Stop polling if no pending jobs
       @rwlock.with_write_lock do
