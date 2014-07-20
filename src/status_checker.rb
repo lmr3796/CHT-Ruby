@@ -10,6 +10,23 @@ class StatusChecker < BaseServer
   module WorkerInterface;end
   include WorkerInterface
 
+  def initialize(worker_table={},arg={})
+    super arg[:logger]
+    # TODO: make up a worker table
+    @lock = ReadWriteLock.new
+    @job_running_time = ReadWriteLockHash.new
+    @worker_server_table = Hash[worker_table]
+    @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
+    @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
+    @dispatcher = arg[:dispatcher]
+    timer_group = Timers::Group.new
+    @periodic_checker = timer_group.every(arg[:update_period] || 1){periodic_check}
+    @update_period = arg[:update_period]
+    raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
+    return
+
+  end
+
   def job_running_time()
     @lock.with_read_lock{return Hash[@job_running_time]}
     return
@@ -40,23 +57,6 @@ class StatusChecker < BaseServer
     @logger.error "Error contacting dispatcher for reschedule"
   end
   private :periodic_check
-
-  def initialize(worker_table={},arg={})
-    super arg[:logger]
-    # TODO: make up a worker table
-    @lock = ReadWriteLock.new
-    @job_running_time = ReadWriteLockHash.new
-    @worker_server_table = Hash[worker_table]
-    @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
-    @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
-    @dispatcher = arg[:dispatcher]
-    timer_group = Timers::Group.new
-    @periodic_checker = timer_group.every(arg[:update_period] || 1){periodic_check}
-    @update_period = arg[:update_period]
-    raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
-    return
-
-  end
 
   def register
     raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
