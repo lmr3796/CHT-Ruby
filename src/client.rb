@@ -131,8 +131,9 @@ class Client
   end
 
   def stop()
+    stop_periodic_task_execution_checker
     @msg_service.stop
-    @dispatcher.unregister_client(self)
+    @dispatcher.unregister_client(@uuid)
     @logger.info "Unregistered from the system"
     return
   end
@@ -179,7 +180,6 @@ class Client
   end
 
   def start()
-    DRb.start_service
     @msg_service.start
     @logger.info "Running message service."
     @logger.info "Sending testing message."
@@ -266,6 +266,10 @@ class Client
     @dispatcher.delete_job(job_id, @uuid)
     @logger.info "Deleted job #{job_id}"
     return
+  end
+
+  def stop_periodic_task_execution_checker
+    @timer_thr.kill.join
   end
 
   def run_periodic_task_execution_checker

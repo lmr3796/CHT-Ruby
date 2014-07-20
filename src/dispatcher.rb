@@ -204,10 +204,8 @@ module Dispatcher::DispatcherClientInterface
     return client_id
   end
 
-  def unregister_client(client)
-    @client_message_queue[client.uuid].clear
-    @client_message_queue.delete client.uuid
-    @logger.info "Client #{client.uuid} unregistered."
+  def unregister_client(client_id)
+    @logger.info "Client #{client_id} unregistered."
     return
   end
 
