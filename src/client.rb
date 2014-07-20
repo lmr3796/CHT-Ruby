@@ -29,35 +29,20 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
       worker_server.validate_occupied_assignment or worker_server.release(@uuid)
       return
     end
-
-    begin
-      task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
-    rescue ThreadError # On empty task Queue
-      # Workers may finish and come back before we fetch last result and delete job.
-      @logger.warn "#{job_id} received worker #{worker} but no task to process"
-      @dispatcher.reschedule
-      worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
-      return
-    end
-
-    # There are task to sent. Submit it.
-    if worker_server.submit_task(task, @uuid)
-      @dispatcher.task_sent(job_id)
-      @execution_assignment[[job_id, task.id]] = worker_server.__drburi
-      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker}"
-    else
-      # On submission rejected
-      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker}. Worker probably gets scheduled to another job"
-      redo_task(task.id, job_id)
-    end
-    return
+    task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
+    submit_task_to_worker(job_id, task, worker_server)
   rescue DRb::DRbConnError
-    @logger.error "Error contacting worker #{worker}"
-    #TODO some recovery??
-    return
+    @logger.error "Error contacting dispatcher to get worker uri"
+  rescue ThreadError # On empty task Queue
+    # Workers may finish and come back before we fetch last result and delete job.
+    @logger.warn "#{job_id} received worker #{worker} but no task to process"
+    @dispatcher.reschedule
+    worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
+  ensure
+    return
   end
 
   def on_task_result_available(m)
@@ -111,6 +96,24 @@ class Client
   include ClientMessageHandler
   attr_reader :uuid, :results, :submit_time, :finish_time, :submitted_jobs, :rwlock
   RESULT_POLLING_INTERVAL = 10
+
+  def submit_task_to_worker(job_id, task, worker_server)
+    if worker_server.submit_task(task, @uuid)
+      @dispatcher.task_sent(job_id)
+      @execution_assignment[[job_id, task.id]] = worker_server
+      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_server.name}"
+    else
+      # On submission rejected
+      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker}. Worker probably gets scheduled to another job"
+      redo_task(task.id, job_id)
+    end
+    return
+  rescue DRb::DRbConnError
+    @logger.error "Error contacting worker #{worker}"
+    #TODO some recovery??
+    return
+  end
+  private :submit_task_to_worker
 
   def initialize(dispatcher_uri, logger=Logger.new(STDERR))
     @rwlock = ReadWriteLock.new
@@ -290,12 +293,9 @@ class Client
   def check_missing_task
     missing = []
     ass = Hash.new.merge(@execution_assignment) # each is not implemented with rwlock...
-    ass.each do |j_and_t, worker_uri|
-      job_id, task_id = j_and_t
-
+    ass.each do |j_and_t, worker_server|
       # Workers may be failed here
-      worker_server = DRbObject.new_with_uri(worker_uri)
-
+      job_id, task_id = j_and_t
       begin
         missing << j_and_t if worker_server.current_execution_of(@uuid) != j_and_t &&
           !worker_server.exist_result?(job_id, task_id, @uuid)
