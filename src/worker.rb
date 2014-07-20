@@ -14,6 +14,7 @@ require_relative 'message_service'
 class Worker < BaseServer; end
 class Worker::WorkerStateCorruptError < RuntimeError; end
 class Worker::InvalidAssignmentError < RuntimeError; end
+class Worker::PreemptedError < RuntimeError; end
 
 Worker::JobAssignment = Struct.new(:job_id, :client_id)
 
@@ -38,6 +39,7 @@ class Worker < BaseServer
     @id = SecureRandom::uuid()
     @name = name
     @mutex = Mutex.new
+    @preemption_lock = Mutex.new
     @status = STATUS::UNKNOWN
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
@@ -210,7 +212,6 @@ class Worker < BaseServer
                                                                           :worker => @name,
                                                                           :job_id => task.job_id,
                                                                           :task_id => task.id))
-          Thread.current[:task] = Thread.current[:client_id] = nil
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
 
         rescue Timeout::Error
@@ -224,7 +225,6 @@ class Worker < BaseServer
         rescue => e
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
-          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
         ensure
           Thread.current[:task] = Thread.current[:client_id] = nil
           self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
@@ -265,6 +265,14 @@ class Worker < BaseServer
 
   def exist_result?(job_id, task_id, client_id)
     @result_manager.exist_result?(job_id, task_id, client_id)
+  end
+
+  def preempt_if_unmatch(job_id)
+    return unless @preemption_lock.try_lock
+    @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id
+    @preemption_lock.unlock
+  ensure
+    return
   end
 end
 

@@ -99,6 +99,10 @@ class StatusChecker < BaseServer
   end
   private :collect_status
 
+  def preempt_unmatch_jobs
+    @worker_server_table.values.each{|w| w.preempt_if_unmatch}
+  end
+
   def release_zombie_occupied_worker(workers=@worker_server_table.keys)
     # Free occupied workers
     workers.select{|w|@worker_status_table[w] == Worker::STATUS::OCCUPIED}.each do |w|
