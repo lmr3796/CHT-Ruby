@@ -148,6 +148,8 @@ class Dispatcher < BaseServer
   private :assign_worker_to_job
 
   # General APIs
+
+  # A delegator
   def reschedule()
     @schedule_manager.schedule_job
     return
@@ -174,7 +176,7 @@ module Dispatcher::DispatcherJobListChangeCallBack
   def on_job_submitted(change_list)
     @logger.debug "Current jobs: #{@job_list.keys}"
     @status_checker.register_job(change_list) # Must make up entry before rescheduling...
-    @schedule_manager.schedule_job
+    reschedule
     @status_checker.require_recollect_status  # Validate zombie and wake up idle workers
     return
   end
@@ -186,7 +188,7 @@ module Dispatcher::DispatcherJobListChangeCallBack
       @status_checker.delete_job_from_logging(job_id)   # Can't make this an callback in status checker for dependency
       @logger.info "Unregistered #{job_id} from status checker"
     end
-    @schedule_manager.schedule_job
+    reschedule
     @status_checker.require_recollect_status  # Validate zombie and wake up idle workers
     return
   end
@@ -225,7 +227,6 @@ module Dispatcher::DispatcherClientInterface
     jobs.is_a? Array or jobs = [jobs]
     raise ArgumentError if !(jobs - @client_job_list[client_id]).empty?
     jobs.each{|job_id|@job_list.delete(job_id)}
-    # TODO: Release tail ones!!!
     @client_job_list[client_id].reject!{|job_id| jobs.include? job_id}
     @logger.debug "Current jobs: #{@job_list.keys}"
     return
@@ -240,6 +241,7 @@ module Dispatcher::DispatcherClientInterface
 
   def task_sent(job_id)
     @job_list[job_id].task_sent
+    # TODO: Release tail ones!!!
     return
   end
 

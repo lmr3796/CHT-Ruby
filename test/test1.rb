@@ -44,9 +44,6 @@ h264_job.priority = 1
 puts 'Dispatching first batch'
 job_set = [wc_job]
 job_set.each {|job| job.deadline = total_deadline}
-# TODO: print schedule?
-#schedule = framework.get_dispatcher().schedule_jobs(job_set)
-#print schedule
 dispatcher_addr = CHT_Configuration::Address::DISPATCHER
 c1 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
 c1.start()
@@ -62,9 +59,6 @@ job_set = [bzip2_job, h264_job]
 job_set.each do |job|
   job.deadline = total_deadline - delay
 end
-# TODO: print schedule?
-#schedule = framework.get_dispatcher().schedule_jobs(job_set)
-#print schedule
 dispatcher_addr = CHT_Configuration::Address::DISPATCHER
 c2 = Client.new CHT_Configuration::Address::druby_uri(dispatcher_addr), job_set
 c2.start()
