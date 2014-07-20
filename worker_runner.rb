@@ -59,11 +59,12 @@ status_checker = DRbObject.new_with_uri status_checker_druby_uri
 dispatcher_druby_uri = options[:dispatcher_address] || CHT_Configuration::Address.druby_uri(CHT_Configuration::Address::DISPATCHER)
 dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
 
+worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 worker = Worker.new(options[:name],
                     :logger=>logger,
                     :status_checker=>status_checker,
-                    :dispatcher=>dispatcher)
-worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
+                    :dispatcher=>dispatcher,
+                    :uri => worker_druby_uri)
 DRb.start_service worker_druby_uri, worker
 logger.info "Worker #{options[:name]} running on #{worker_druby_uri}..."
 worker.register # Must registier only after service started

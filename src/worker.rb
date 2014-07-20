@@ -43,7 +43,9 @@ class Worker < BaseServer
     @result_manager = TaskResultManager.new
     @dispatcher = arg[:dispatcher]
     @status_checker = arg[:status_checker]
+    @uri = arg[:uri]
     @assignment = Atomic.new(JobAssignment.new) # Real task assignment should not depend on this, this is only for validating submission
+    @task_execution_thr = Thread::main
     return
   end
 
@@ -98,7 +100,7 @@ class Worker < BaseServer
     if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
       self.status = STATUS::OCCUPIED
       @logger.debug "Notifies main thread to keep executing"
-      Thread::main.run
+      @task_execution_thr.run
     end
     return
   end
@@ -109,7 +111,8 @@ class Worker < BaseServer
     raise ArgumentError if job_id == nil
     worker_available_msg = MessageService::Message.new(:worker_available,
                                                        :worker=>@name,
-                                                       :job_id=>job_id)
+                                                       :job_id=>job_id,
+                                                       :uri => @uri)
     @logger.debug "Send message to tell client #{client_id} worker I'm ready to for job #{job_id}."
     @dispatcher.push_message(client_id, worker_available_msg)
     return
@@ -129,7 +132,7 @@ class Worker < BaseServer
     valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
     valid ?
       @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
-      Thread::main.raise(InvalidAssignmentError)
+      @task_execution_thr.raise(InvalidAssignmentError)
     return valid
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
@@ -141,7 +144,7 @@ class Worker < BaseServer
       return false
     end
     @logger.warn "Releasing by #{client_id}:#{job_id}"
-    Thread::main.raise(InvalidAssignmentError)
+    @task_execution_thr.raise(InvalidAssignmentError)
     @logger.warn "Released by #{client_id}:#{job_id}"
     return
   end
@@ -149,7 +152,7 @@ class Worker < BaseServer
   def submit_task(task, client_id)
     raise ArgumentError if !task.is_a? Task
     raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
-    raise WorkerStateCorruptError if !Thread::main.stop?
+    raise WorkerStateCorruptError if !@task_execution_thr.stop?
 
     @mutex.synchronize do
       a = self.assignment
@@ -162,12 +165,12 @@ class Worker < BaseServer
         return false
       end
       raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
-      raise WorkerStateCorruptError if !Thread::main.stop?
-      Thread::main[:task] = task
-      Thread::main[:client_id] = client_id
-      Thread::main.raise WorkerStateCorruptError and raise WorkerStateCorruptError if !Thread::main.stop?
+      raise WorkerStateCorruptError if !@task_execution_thr.stop?
+      @task_execution_thr[:task] = task
+      @task_execution_thr[:client_id] = client_id
+      @task_execution_thr.raise WorkerStateCorruptError and raise WorkerStateCorruptError if !@task_execution_thr.stop?
       raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
-      raise WorkerStateCorruptError if !Thread::main.stop?
+      raise WorkerStateCorruptError if !@task_execution_thr.stop?
       @logger.debug "#{task.job_id}[#{task.id}] submitted"
       self.status = STATUS::BUSY
       @task_ready.signal
@@ -256,7 +259,7 @@ class Worker < BaseServer
 
   def current_execution_of(client_id)
     return Thread.exclusive do
-      client_id != Thread::main[:client_id] ? nil : [Thread::main[:task].job_id, Thread::main[:task].id]
+      client_id != @task_execution_thr[:client_id] ? nil : [@task_execution_thr[:task].job_id, @task_execution_thr[:task].id]
     end
   end
 

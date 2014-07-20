@@ -23,7 +23,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.info "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
     job_id = m.content[:job_id]
     worker = m.content[:worker]
-    worker_server = DRbObject.new_with_uri(@dispatcher.worker_uri(worker))
+    worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
       worker_server.validate_occupied_assignment or worker_server.release(@uuid)
