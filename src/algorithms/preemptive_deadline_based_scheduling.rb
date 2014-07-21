@@ -4,8 +4,6 @@ require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
   class PreemptiveDeadlineBasedScheduling
-    def initialize()
-    end
     def schedule_job(job_list, worker_status, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
@@ -18,23 +16,33 @@ module SchedulingAlgorithm
       current_timestamp = Time.now  # Should be consistent within the whole schedule process
       job_running_time = arg[:job_running_time]
       worker_avg_running_time = arg[:job_running_time]
-      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
       remaining_worker = worker_status.keys
-      schedule_result = {}
+      schedule_result = Hash[job_list.keys.map{|j_id|[j_id,[]]}]
 
-      job_id_by_priority.each{ |job_id|
+      # Schdule to just enough
+      job_list.each_pair.sort_by{|job_id, job| job.priority}.each do |job_id, job|
         break if remaining_worker.empty?
-        job = job_list[job_id]
-        @logger.debug "job_id, undone = #{job_id}, #{job.progress.undone}"
+        @logger.debug "Just enough: job_id, undone = #{job_id}, #{job.progress.undone}"
         history = job_running_time[job_id]
         avg_time = history.reduce(:+)/history.size rescue nil
         job.avg_task_running_time = avg_time if avg_time != nil && avg_time > 0
         worker_by_throughput = remaining_worker.sort_by{|worker_id| job.task_running_time_on_worker[worker_id]}
         assigned_worker_offset, assigned_worker_size = get_required_worker_range(job_id, job, worker_by_throughput, current_timestamp,
                                                                                  job_running_time, worker_avg_running_time)
-        schedule_result[job_id] = worker_by_throughput.slice!(assigned_worker_offset, assigned_worker_size)
+        schedule_result[job_id] += worker_by_throughput.slice!(assigned_worker_offset, assigned_worker_size)
         remaining_worker = worker_by_throughput
-      }
+      end
+
+      # Aggressively schedule the remaining ones to urgent ones.
+      job_list.each_pair.sort_by{|job_id, job| job.deadline}.each do |job_id, job|
+        break if remaining_worker.empty?
+        next if job.progress.undone <= schedule_result[job_id].size
+        @logger.debug "Earliest deadline: job_id, undone = #{job_id}, #{job.progress.undone}"
+        worker_by_throughput = remaining_worker.sort_by{|worker_id| job.task_running_time_on_worker[worker_id]}
+        schedule_result[job_id] += worker_by_throughput.slice!(0, job.progress.undone - schedule_result[job_id].size)
+        remaining_worker = worker_by_throughput
+      end
+
       return schedule_result
     end
 
