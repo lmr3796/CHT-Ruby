@@ -62,11 +62,6 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     # Update the results
     add_results(fetched_results, job_id)
-    fetched_results.each do |r|
-      # TODO what if poller find out before this???
-      @execution_assignment.delete([job_id, r.task_id])
-      @logger.debug "Update running status of #{job_id}[#{r.task_id}]"
-    end
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
@@ -246,6 +241,15 @@ class Client
 
         @results[job_id][r.task_id] = r
         @logger.info "Updated result of #{job_id}[#{r.task_id}]"
+
+        # TODO what if poller find out before this???
+        @execution_assignment.delete([job_id, r.task_id])
+        begin
+          @dispatcher.task_done(job_id)
+        rescue DRb::DRbConnError
+          @logger.error "Error when notifing dispacher #{job_id}[#{r.task_id}] done."
+        end
+        @logger.debug "Updated running status of #{job_id}[#{r.task_id}]"
       end
     end
 
