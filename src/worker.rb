@@ -187,8 +187,10 @@ class Worker < BaseServer
   end
   private :validate_state_after_client_submission
 
+  # FIXME: Preemption lock is a dirty hack...
   def start
     loop do
+      @preemption_lock.lock unless @preemption_lock.owned?
       Thread::stop if @status == STATUS::AVAILABLE
       @mutex.synchronize do  # Worker is dedicated
         begin
@@ -204,7 +206,9 @@ class Worker < BaseServer
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
+          @preemption_lock.unlock
           result = run_task(task)
+          @preemption_lock.lock unless @preemption_lock.owned?
           log_running_time(result.job_id, result.run_time)
           @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
           @result_manager.add_result(client_id, result)
@@ -214,6 +218,8 @@ class Worker < BaseServer
                                                                           :task_id => task.id))
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
 
+        rescue PreemptedError
+          @logger.warn "#{task.job_id}[#{task.id}] is preempted."
         rescue Timeout::Error
           @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
         rescue InvalidAssignmentError
@@ -268,10 +274,9 @@ class Worker < BaseServer
   end
 
   def preempt_if_unmatch(job_id)
-    return unless @preemption_lock.try_lock
+    return unless @preemption_lock.try_lock # If we can't lock it, it means it's not running a task
     @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id
     @preemption_lock.unlock
-  ensure
     return
   end
 end

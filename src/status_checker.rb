@@ -52,6 +52,8 @@ class StatusChecker < BaseServer
     collect_status
     @logger.info 'Asked to reschedule'
     @dispatcher.reschedule
+    wj_table = @dispatcher.worker_job_table
+    preempt_unmatch_jobs(wj_table)
     return
   rescue DRb::DRbConnError
     @logger.error "Error contacting dispatcher for reschedule"
@@ -99,8 +101,18 @@ class StatusChecker < BaseServer
   end
   private :collect_status
 
-  def preempt_unmatch_jobs
-    @worker_server_table.values.each{|w| w.preempt_if_unmatch}
+  def preempt_unmatch_jobs(worker_job_table)
+    @logger.info "Preempting nonconsistent jobs"
+    @worker_server_table.
+      reject{|w, s| [Worker::STATUS::DOWN, Worker::STATUS::UNKNOWN].include?(@worker_status_table[w])}.
+      each do|w, s|
+      begin
+        s.preempt_if_unmatch(worker_job_table[w])
+      rescue DRb::DRbConnError
+        @logger.error "Can't reach worker #{w}, mark as down"
+        mark_worker_status(w, Worker::STATUS::DOWN)
+      end
+    end
   end
 
   def release_zombie_occupied_worker(workers=@worker_server_table.keys)
