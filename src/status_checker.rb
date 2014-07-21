@@ -19,8 +19,9 @@ class StatusChecker < BaseServer
     @worker_status_table = Hash[worker_table.map{|w_id, w| [w_id, Worker::STATUS::UNKNOWN]}]
     @worker_avg_running_time = Hash[worker_table.map{|w_id, w| [w_id, nil]}]
     @dispatcher = arg[:dispatcher]
-    timer_group = Timers::Group.new
-    @periodic_checker = timer_group.every(arg[:update_period] || 1){periodic_check}
+    # FIXME: implement stop for timer_group and join periodic_check thread or it became a zombie
+    @periodic_checker_timer_group = Timers::Group.new
+    @periodic_checker = @periodic_checker_timer_group.every(arg[:update_period] || 1){periodic_check}
     @update_period = arg[:update_period]
     raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
     return
@@ -62,7 +63,7 @@ class StatusChecker < BaseServer
 
   def register
     raise ArgumentError if @update_period != nil && !@update_period.is_a?(Numeric)
-    Thread.new(timer_group){|t|loop{t.wait}} if @update_period != nil
+    Thread.new(@periodic_checker_timer_group){|t|loop{t.wait}} if @update_period != nil
     @periodic_checker.fire
     return
   end

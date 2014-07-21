@@ -22,20 +22,20 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     m.is_a? MessageService::Message or raise ArgumentError
     @logger.info "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"
     job_id = m.content[:job_id]
-    worker = m.content[:worker]
+    worker_name = m.content[:worker]
     worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
       worker_server.validate_occupied_assignment or worker_server.release(@uuid)
       return
     end
-    task = @task_queue[job_id].pop(true) # Nonblocked, raise error if empty
-    submit_task_to_worker(job_id, task, worker_server)
+    task = @task_queue[job_id].pop(true)                              # Nonblocked, raise error if empty
+    submit_task_to_worker(job_id, task, worker_name, worker_server)   # Handles DRb::DRbConnError inside
   rescue DRb::DRbConnError
-    @logger.error "Error contacting dispatcher to get worker uri"
+    @logger.error "Error contacting worker #{worker_name}"
   rescue ThreadError # On empty task Queue
     # Workers may finish and come back before we fetch last result and delete job.
-    @logger.warn "#{job_id} received worker #{worker} but no task to process"
+    @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
     @dispatcher.reschedule
     worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
   rescue => e
@@ -97,20 +97,23 @@ class Client
   attr_reader :uuid, :results, :submit_time, :finish_time, :submitted_jobs, :rwlock
   RESULT_POLLING_INTERVAL = 10
 
-  def submit_task_to_worker(job_id, task, worker_server)
+  def submit_task_to_worker(job_id, task, worker_name, worker_server)
+    raise ArgumentError if job_id == nil
+    raise ArgumentError if task == nil
+    raise ArgumentError if worker_server== nil
     if worker_server.submit_task(task, @uuid)
       @dispatcher.task_sent(job_id)
       @execution_assignment[[job_id, task.id]] = worker_server
-      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_server.name}"
+      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
     else
       # On submission rejected
-      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker}. Worker probably gets scheduled to another job"
+      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
       redo_task(task.id, job_id)
     end
     return
   rescue DRb::DRbConnError
-    @logger.error "Error contacting worker #{worker}"
-    #TODO some recovery??
+    @logger.error "Error contacting worker #{worker_name} to submit the task."
+    redo_task(task.id, job_id)
     return
   end
   private :submit_task_to_worker
@@ -319,10 +322,13 @@ class Client
     @logger.warn "Result of #{job_id}[#{task_id}] lost, asked to redo"
     @execution_assignment.delete([job_id, task_id])
     redo_task(job_id, task_id)
+    # In this case, we've already told dispatcher task sent, so tell it to redo is necessary
+    @dispatcher.redo_task(job_id)
+    return
   end
 
   def redo_task(job_id, task_id)
     @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
-    @dispatcher.redo_task(job_id)
+    return
   end
 end
