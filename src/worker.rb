@@ -241,7 +241,7 @@ class Worker < BaseServer
 
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
-    @logger.debug "#{task.job_id}[#{task.id}] running."
+    @logger.info "#{task.job_id}[#{task.id}] running."
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
     result = task.run
     return result
@@ -346,7 +346,7 @@ class Worker::ClearResultRequest
       logger.warn "Invalid clear request that #{@client_id} to delete #{@job_id}"
       return
     end
-    task_result[job_id] == [] and return if @task_id_to_delete == ALL
+    task_result[job_id] = [] and return if @task_id_to_delete == ALL
     task_result[job_id].reject! do |r|
       if @task_id_to_delete.include? r.task_id
         logger.debug "#{job_id}[#{r.task_id}] deleted."
@@ -355,6 +355,7 @@ class Worker::ClearResultRequest
         false
       end
     end
+    return
   end
 end
 
