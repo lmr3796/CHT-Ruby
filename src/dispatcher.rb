@@ -248,6 +248,11 @@ module Dispatcher::DispatcherClientInterface
     return
   end
 
+  def task_done(job_id)
+    @job_list[job_id].task_done
+    return
+  end
+
   def on_job_done(job_id)
     @logger.info "#{job_id} is done"
     @job_list.delete(job_id)

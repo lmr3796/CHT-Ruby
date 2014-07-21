@@ -1,6 +1,25 @@
 require 'atomic'
 require 'open3'
 
+class Job; end
+
+class Job::Progress
+  attr_accessor :queued, :sent, :done
+  def initialize(queued=0, sent=0, done=0)
+    @queued = queued
+    @sent = sent
+    @done = done
+  end
+
+  def total
+    return @queued + @sent + @done
+  end
+
+  def undone
+    return @queued + @sent
+  end
+end
+
 class Job
   attr_reader :task
   attr_accessor :priority, :deadline, :task_running_time_on_worker, :avg_task_running_time
@@ -11,39 +30,54 @@ class Job
     @priority = priority
     @deadline = deadline
     @task_running_time_on_worker = task_running_time_on_worker
-    @task_remaining = Atomic.new(0)
+    @progress = Atomic.new(Progress.new)
     return
   end
 
+  # Should be invoked only on Task generation
   def add_task(t)
     t.id = @task.size
-    @task_remaining.update do |value|
+    @progress.update do |progress|
       @task << t
-      value + 1
-    end
-    return
-  end
-
-  def clear_task()
-    @task_remaining.update do |value|
-      @task = []
-      0
+      p = progress.clone
+      p.queued += 1
+      next p
     end
     return
   end
 
   def task_redo
-    @task_remaining.update {|value| value + 1}
+    @progress.update do |progress|
+      p = progress.clone
+      p.sent -= 1
+      p.queued += 1
+      next p
+    end
     return
   end
 
   def task_sent
-    @task_remaining.update {|value| value - 1}
+    @progress.update do |progress|
+      p = progress.clone
+      p.queued -= 1
+      p.sent += 1
+      next p
+    end
     return
   end
 
-  def task_remaining
-    return @task_remaining.value
+  def task_done
+    @progress.update do |progress|
+      p = progress.clone
+      p.sent -= 1
+      p.done += 1
+      next p
+    end
+    return
+  end
+
+  def progress
+    return @progress.value
   end
 
   def deadline=(deadline)
@@ -54,13 +88,13 @@ class Job
 
 
   def marshal_dump()
-    [@task, @priority, @deadline, @task_running_time_on_worker, @task_remaining.value]
+    [@task, @priority, @deadline, @task_running_time_on_worker, @progress.value]
   end
 
   def marshal_load(array)
-    @task, @priority, @deadline, @task_running_time_on_worker, @task_remaining = array
+    @task, @priority, @deadline, @task_running_time_on_worker, @progress = array
     @deadline = Time.at(deadline)
-    @task_remaining = Atomic.new(@task_remaining)
+    @progress = Atomic.new(@progress)
   end
 
   def eql?(rhs)
