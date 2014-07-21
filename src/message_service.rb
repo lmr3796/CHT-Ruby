@@ -150,8 +150,9 @@ module MessageService
     end
 
     def stop
-      @notification_thr.kill
-      @process_thr.kill
+      @notification_thr.raise Interrupt
+      @process_thr.raise Interrupt
+      @msg_queue.clear
       return
     end
 
@@ -167,9 +168,15 @@ module MessageService
             #@logger.debug "Push message #{m.inspect} to message queue"
             @msg_queue << m
           end
+        rescue Interrupt
+          return
         rescue InvalidMessageError
           @logger.error "Invalid stuff obtained: #{msg_list}"
           next
+        rescue => e
+          @logger.error "Error polling message #{m.inspect}"
+          @logger.error e.message
+          @logger.error e.backtrace.join("\n")
         end
       end
     end
@@ -189,6 +196,8 @@ module MessageService
         m = @msg_queue.pop
         begin
           process_message(m)
+        rescue Interrupt
+          return
         rescue InvalidMessageError => e
           @logger.error "Message #{m} invalid"
         rescue NoMatchingHandlerError => e
@@ -197,7 +206,6 @@ module MessageService
           @logger.error "Error processing message #{m.inspect}"
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
-          system('killall ruby')  # FIXME: remove me!!! debug use!!!!
         end
       end
     end

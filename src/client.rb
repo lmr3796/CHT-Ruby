@@ -272,12 +272,13 @@ class Client
   end
 
   def stop_periodic_task_execution_checker
-    @timer_thr.kill.join
+    @task_execution_checker_timer_group.pause_all
+    @timer_thr.kill
   end
 
   def run_periodic_task_execution_checker
-    timer_group = Timers::Group.new
-    @task_execution_checker = timer_group.every(RESULT_POLLING_INTERVAL) do
+    @task_execution_checker_timer_group = Timers::Group.new
+    @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
       missing_task = check_missing_task
       @dispatcher.tell_worker_down_detected
       missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
@@ -289,9 +290,9 @@ class Client
         end
       end
     end
-    @timer_thr = Thread.new(timer_group) do |t|
+    @timer_thr = Thread.new do
       loop do
-        t.wait
+        @task_execution_checker_timer_group.wait
       end
     end
   end
