@@ -18,6 +18,16 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   # to dynamically invoke `MessageHandler#on_[type]`, passing the message as
   # the only parameter.
 
+  def on_task_preempted(m)
+    m.is_a? MessageService::Message or raise ArgumentError
+    job_id = m.content[:job_id]
+    task_id = m.content[:task_id]
+    worker_name = m.content[:worker]
+    return if !@task_queue.has_key?(job_id) # Job outdated; nevermind it.
+    @logger.warn "#{job_id}[#{task_id}] on #{worker_name} is preempted."
+    on_result_lost(job_id, task_id)
+  end
+
   def on_worker_available(m)
     m.is_a? MessageService::Message or raise ArgumentError
     @logger.info "Worker #{m.content[:worker]} assigned for job #{m.content[:job_id]}"

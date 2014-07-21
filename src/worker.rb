@@ -220,6 +220,10 @@ class Worker < BaseServer
 
         rescue PreemptedError
           @logger.warn "#{task.job_id}[#{task.id}] is preempted."
+          @dispatcher.push_message(client_id, MessageService::Message.new(:task_preempted,
+                                                                          :worker => @name,
+                                                                          :job_id => task.job_id,
+                                                                          :task_id => task.id))
         rescue Timeout::Error
           @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
         rescue InvalidAssignmentError
