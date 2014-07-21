@@ -8,7 +8,8 @@ module CHT_Configuration
     include SchedulingAlgorithm
     # require 'path/to/your/algorithm-without-extension-name'
     # ALGORITHM = YourModule::YourAlgorithm
-    ALGORITHM = DeadlineBasedScheduling  #Just Provide class name
+    #ALGORITHM = DeadlineBasedScheduling  #Just Provide class name
+    ALGORITHM = PreemptiveDeadlineBasedScheduling  #Just Provide class name
   end
   module Address
     module DefaultPorts
