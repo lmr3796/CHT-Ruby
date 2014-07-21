@@ -236,6 +236,8 @@ class Worker < BaseServer
           @logger.error e.message
           @logger.error e.backtrace.join("\n")
         ensure
+          # Can't set them to nil before preemption done
+          @preemption_lock.lock unless @preemption_lock.owned?
           Thread.current[:task] = Thread.current[:client_id] = nil
           self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
         end
