@@ -136,6 +136,7 @@ class SleepTask < Task
   SUCCESS_STATUS = get_synthesized_success_status
 
   def initialize(sleep_time)
+    raise ArugmentError unless sleep_time.is_a? Numeric
     @sleep_time = sleep_time
     return
   end
