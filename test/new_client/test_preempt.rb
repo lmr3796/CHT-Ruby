@@ -6,7 +6,7 @@ require_relative '../../src/client.rb'
 require_relative '../../src/job.rb'
 
 def get_client()
-  logger = Logger.new(STDERR)
+  $logger = logger = Logger.new(STDERR)
   logger.level = CHT_Configuration::LOGGER_LEVEL
   dispatcher_addr = CHT_Configuration::Address::DISPATCHER
   dispatcher_uri = CHT_Configuration::Address::druby_uri dispatcher_addr
@@ -14,7 +14,7 @@ def get_client()
 end
 def get_job(deadline=Time.now+300)
   j = Job.new
-  5.times { j.add_task Task.new('sleep',['30'])}
+  5.times { j.add_task Task.new('sleep',['20'])}
   j.deadline = deadline
   j.priority = rand(1...20)
   return j
@@ -26,7 +26,8 @@ j1 = get_job
 j2 = get_job
 j2.priority=100
 c.submit_jobs(j2)
-sleep 10
+#sleep rand * 10
+sleep 5
 c.submit_jobs(j1)
 #c.submit_jobs([get_job, get_job, get_job])
 #sleep rand * 10
