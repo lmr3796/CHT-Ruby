@@ -108,12 +108,12 @@ class Client
     else
       # On submission rejected
       @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
-      redo_task(task.id, job_id)
+      redo_task(job_id, task.id)
     end
     return
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker_name} to submit the task."
-    redo_task(task.id, job_id)
+    redo_task(job_id, task.id)
     return
   end
   private :submit_task_to_worker

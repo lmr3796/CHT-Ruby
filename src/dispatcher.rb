@@ -102,11 +102,12 @@ class Dispatcher::ScheduleManager
         raise
       end
 
-      @worker_job_table = ReadWriteLockHash.new
+      new_worker_job_table = Hash.new
       @job_worker_table.keys.each do |job_id|
         workers = @job_worker_table[job_id]
-        workers.each{|worker| @worker_job_table[worker] = job_id}
+        workers.each{|worker| new_worker_job_table[worker] = job_id}
       end
+      @worker_job_table.replace(new_worker_job_table)
     end
     @logger.info 'Updated schedule successfully'
     @logger.debug "Current schedule: #{@job_worker_table}"

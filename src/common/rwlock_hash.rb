@@ -8,6 +8,10 @@ class ReadWriteLockHash < Hash
     return @rwlock = ReadWriteLock.new
   end
 
+  def replace(*args)
+    return @rwlock.with_write_lock{super(*args)}
+  end
+
   def has_key?(*args)
     return @rwlock.with_read_lock{super(*args)}
   end

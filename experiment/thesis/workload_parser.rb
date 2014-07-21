@@ -162,7 +162,7 @@ class WorkloadSynthesizer
       # Model priority by user
       job.priority = group[j[:user_id]]
       (0...j[:allocated_processors]).each do
-        job.add_task SleepTask.new(j[:run_time])
+        job.add_task SleepTask.new(j[:run_time].to_f)
       end
       # Parse submission time
       {:job => job, :submit_time => j[:submit_time]}
