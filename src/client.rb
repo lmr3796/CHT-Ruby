@@ -325,8 +325,7 @@ class Client
   end
 
   def on_result_lost(job_id, task_id)
-    @logger.warn "Result of #{job_id}[#{task_id}] lost, asked to redo"
-    @execution_assignment.delete([job_id, task_id])
+    @logger.warn "Result of #{job_id}[#{task_id}] lost or preempted, asked to redo"
     redo_task(job_id, task_id)
     # In this case, we've already told dispatcher task sent, so tell it to redo is necessary
     @dispatcher.redo_task(job_id)
@@ -334,6 +333,7 @@ class Client
   end
 
   def redo_task(job_id, task_id)
+    @execution_assignment.delete([job_id, task_id])
     @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
     return
   end
