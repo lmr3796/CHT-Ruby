@@ -70,10 +70,8 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
     # Clear results that are on hand...
     @logger.info "Deleting obtained results of #{job_id} on worker #{worker}"
-    clear_request = Worker::ClearResultRequest.new(job_id,
-                                                   @results[job_id].each_with_index.select{|i|@results[job_id] != nil},
-                                                   @uuid
-                                                  )
+    task_id_to_delete = @results[job_id].each_with_index.select{|r, i|r != nil}.map{|r,i| i}
+    clear_request = Worker::ClearResultRequest.new(job_id, task_id_to_delete, @uuid)
     worker_server.clear_result(clear_request)
     @logger.info "Deleted obtained results of #{job_id} on worker #{worker}"
 
@@ -237,12 +235,15 @@ class Client
       r.job_id == job_id or raise ArgumentError, 'Job id mismatched'
     end
 
+    # Log down results
     @rwlock.with_write_lock do
       results.each do |r|
         raise "Invalid task_id for #{job_id}" if r.task_id < 0
         raise "Invalid task_id for #{job_id}" if @results[job_id].size <= r.task_id
-        # TODO Conflict results might come before we delete it on worker.
+        # Conflict results might come before we delete it on worker.
         # We currently ignore this
+        next if @results[job_id][r.task_id] != nil
+
         @results[job_id][r.task_id] = r
         @logger.info "Updated result of #{job_id}[#{r.task_id}]"
       end
