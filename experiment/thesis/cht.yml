@@ -31,42 +31,42 @@ windows:
       layout: tile
       panes:
         - 1:
-            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 2:
-            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud02 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 3:
-            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 4:
-            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud03 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 5:
-            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 6:
-            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud04 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 7:
-            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 8:
-            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud05 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 9:
-            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 10:
-            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud06 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 11:
-            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 12:
-            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud07 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 13:
-            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 14:
-            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud08 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 15:
-            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 16:
-            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud09 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 17:
-            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 18:
-            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud10 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
         - 19:
-            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20001 \`hostname\`-1'"
+            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-1'"
         - 20:
-            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb 20002 \`hostname\`-2'"
+            - ssh cloud11 bash -l -c "'cd ~/CHT-Ruby; sleep 2; ruby worker_runner.rb -n \`hostname\`-2'"
