@@ -36,18 +36,19 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
-      worker_server.validate_occupied_assignment or worker_server.release(@uuid)
+      raise ThreadError
       return
     end
     task = @task_queue[job_id].pop(true)                              # Nonblocked, raise error if empty
     submit_task_to_worker(job_id, task, worker_name, worker_server)   # Handles DRb::DRbConnError inside
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker_name}"
-  rescue ThreadError # On empty task Queue
+  rescue ThreadError # On no task to do
     # Workers may finish and come back before we fetch last result and delete job.
     @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
     @dispatcher.reschedule
-    worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
+    assignment_valid = worker_server.validate_occupied_assignment
+    worker_server.release(@uuid) if assignment_valid
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")

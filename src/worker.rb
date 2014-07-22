@@ -131,11 +131,15 @@ class Worker < BaseServer
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
     @logger.debug "Validating assignment"
-    valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
-    valid ?
-      @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
-      @task_execution_thr.raise(InvalidAssignmentError)
-    return valid
+    @mutex.synchronize do
+      valid = @dispatcher.get_assigned_job(@name) == self.assignment.job_id
+      @logger.debug("Assignment of job #{self.assignment.job_id} is #{valid ? 'valid' : 'invalid'}.")
+      if !valid
+        @logger.debug("Release on self validation")
+        @task_execution_thr.raise(InvalidAssignmentError)
+      end
+      return valid
+    end
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
   end

@@ -170,11 +170,6 @@ class Dispatcher < BaseServer
     return
   end
 
-  def has_job?(job_id)
-    raise ArgumentError if job_id == nil
-    return @job_list.has_key? job_id
-  end
-
 end
 
 module Dispatcher::DispatcherJobListChangeCallBack
@@ -218,6 +213,10 @@ module Dispatcher::DispatcherClientInterface
     return job_list.map{|job| SecureRandom.uuid}
   end
 
+  def get_progress(job_id)
+    return @job_list[job_id].progress
+  end
+
   def submit_jobs(job_id_table, client_id)
     @logger.info "Job submitted: #{job_id_table.keys}"
     @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
@@ -240,17 +239,29 @@ module Dispatcher::DispatcherClientInterface
     @logger.warn "A task of #{job_id} needs redo, reschedule"
     reschedule
     return
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
   def task_sent(job_id)
     @job_list[job_id].task_sent
     # TODO: Release tail ones!!!
     return
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
   def task_done(job_id)
     @job_list[job_id].task_done
     return
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
   def on_job_done(job_id)
@@ -265,12 +276,16 @@ module Dispatcher::DispatcherClientInterface
 end
 
 module Dispatcher::DispatcherWorkerInterface 
+  def get_assigned_job(worker)
+    return @schedule_manager.worker_job_table[worker]
+  end
+
   # Returns next job assignment
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
     next_job_assigned = nil
     @resource_mutex.synchronize do
-      next_job_assigned = @schedule_manager.worker_job_table[worker]
+      next_job_assigned = get_assigned_job(worker)
       next if next_job_assigned == nil
       assign_worker_to_job(worker, next_job_assigned)
     end
