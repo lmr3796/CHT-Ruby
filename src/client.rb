@@ -47,6 +47,10 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     # Workers may finish and come back before we fetch last result and delete job.
     @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
     @task_execution_checker.fire
+    @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+    @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+    @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size}"
+    @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i}}"
     @dispatcher.reschedule
     assignment_valid = worker_server.validate_occupied_assignment
     worker_server.release(@uuid) if assignment_valid
