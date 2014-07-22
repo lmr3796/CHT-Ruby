@@ -29,7 +29,7 @@ class StatusChecker < BaseServer
   end
 
   def job_running_time()
-    @lock.with_read_lock{return Hash[@job_running_time]}
+    @lock.with_read_lock{return @job_running_time.hash_clone}
     return
   end
 
