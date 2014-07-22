@@ -56,7 +56,7 @@ end
 
 class Dispatcher::ClientJobList < ReadWriteLockHash
   def get_client_by_job(job_id)
-    each{|c, jl| return c if jl.include?(job_id)}
+    hash_clone.each{|c, jl| return c if jl.include?(job_id)}
     return
   end
 end
@@ -82,7 +82,7 @@ class Dispatcher::ScheduleManager
       begin
         job_running_time = @status_checker.job_running_time
         worker_avg_running_time = @status_checker.worker_avg_running_time
-        cloned_job_list = Hash.new.merge(@job_list)
+        cloned_job_list = @job_list.hash_clone
         workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
       rescue DRb::DRbConnError
         @logger.error "Error reaching status checker when scheduling"
