@@ -255,11 +255,6 @@ class Client
 
         # TODO what if poller find out before this???
         @execution_assignment.delete([job_id, r.task_id])
-        begin
-          @dispatcher.task_done(job_id)
-        rescue DRb::DRbConnError
-          @logger.error "Error when notifing dispacher #{job_id}[#{r.task_id}] done."
-        end
         @logger.debug "Updated running status of #{job_id}[#{r.task_id}]"
       end
     end
