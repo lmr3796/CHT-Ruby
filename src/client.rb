@@ -25,7 +25,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_name = m.content[:worker]
     return if !@task_queue.has_key?(job_id) # Job outdated; nevermind it.
     @logger.warn "#{job_id}[#{task_id}] on #{worker_name} is preempted."
-    on_result_lost(job_id, task_id)
+    @task_execution_checker.fire
   end
 
   def on_worker_available(m)
@@ -46,6 +46,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
   rescue ThreadError # On no task to do
     # Workers may finish and come back before we fetch last result and delete job.
     @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
+    @task_execution_checker.fire
     @dispatcher.reschedule
     assignment_valid = worker_server.validate_occupied_assignment
     worker_server.release(@uuid) if assignment_valid
