@@ -18,11 +18,15 @@ module CHT_Configuration
       DECISION_MAKER_DEFAULT_PORT  = 10003
     end
 
-    DISPATCHER      = {:address => '192.168.10.211', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
-    STATUS_CHECKER  = {:address => '192.168.10.115', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
-    DECISION_MAKER  = {:address => '192.168.10.47', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
+    DISPATCHER      = {:address => '192.168.10.158', :port  => DefaultPorts::DISPATCHER_DEFAULT_PORT}
+    STATUS_CHECKER  = {:address => '192.168.10.137', :port  => DefaultPorts::STATUS_CHECKER_DEFAULT_PORT}
+    DECISION_MAKER  = {:address => '192.168.10.183', :port  => DefaultPorts::DECISION_MAKER_DEFAULT_PORT}
 
     WORKERS = {
+	'cht02-1' => {:address => '192.168.10.115', :port => 20001},
+	'cht02-2' => {:address => '192.168.10.115', :port => 20002},
+	'cht03-1' => {:address => '192.168.10.47' , :port => 20001},
+	'cht03-2' => {:address => '192.168.10.47' , :port => 20002},
 	'cht04-1' => {:address => '192.168.10.247', :port => 20001},
 	'cht04-2' => {:address => '192.168.10.247', :port => 20002},
 	'cht05-1' => {:address => '192.168.10.182', :port => 20001},
@@ -39,10 +43,6 @@ module CHT_Configuration
 	'cht10-2' => {:address => '192.168.10.191', :port => 20002},
 	'cht11-1' => {:address => '192.168.10.120', :port => 20001},
 	'cht11-2' => {:address => '192.168.10.120', :port => 20002},
-	'cht12-1' => {:address => '192.168.10.183', :port => 20001},
-	'cht12-2' => {:address => '192.168.10.183', :port => 20002},
-	'cht13-1' => {:address => '192.168.10.137', :port => 20001},
-	'cht13-2' => {:address => '192.168.10.137', :port => 20002},
     }
 
     def self.druby_uri(socket)
