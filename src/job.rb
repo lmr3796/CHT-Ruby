@@ -41,7 +41,7 @@ class Job
       @task << t
       p = progress.clone
       p.queued += 1
-      next p
+      p
     end
     return
   end
@@ -49,9 +49,10 @@ class Job
   def task_redo
     @progress.update do |progress|
       p = progress.clone
+      raise 'No sent task to redo' if p.sent == 0
       p.sent -= 1
       p.queued += 1
-      next p
+      p
     end
     return
   end
@@ -59,9 +60,10 @@ class Job
   def task_sent
     @progress.update do |progress|
       p = progress.clone
+      raise 'No queued task' if p.queued == 0
       p.queued -= 1
       p.sent += 1
-      next p
+      p
     end
     return
   end
@@ -69,9 +71,10 @@ class Job
   def task_done
     @progress.update do |progress|
       p = progress.clone
+      raise 'No sent task to be done' if p.sent == 0
       p.sent -= 1
       p.done += 1
-      next p
+      p
     end
     return
   end
