@@ -35,42 +35,42 @@ windows:
       layout: tile
       panes:
         - 1:
-            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht02-1'"
         - 2:
-            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht02-2'"
         - 3:
-            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht03-1'"
         - 4:
-            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht03-2'"
         - 5:
-            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht04-1'"
         - 6:
-            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht04-2'"
         - 7:
-            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht05-1'"
         - 8:
-            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht05-2'"
         - 9:
-            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht06-1'"
         - 10:
-            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht06-2'"
         - 11:
-            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht07-1'"
         - 12:
-            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht07-2'"
         - 13:
-            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht08-1'"
         - 14:
-            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht08-2'"
         - 15:
-            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht09-1'"
         - 16:
-            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht09-2'"
         - 17:
-            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht10-1'"
         - 18:
-            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht10-2'"
         - 19:
-            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht11-1'"
         - 20:
-            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n cht11-2'"
