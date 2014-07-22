@@ -4,9 +4,10 @@ class ReadWriteLock
   def initialize()
     @mutex = Mutex.new
     @cv = ConditionVariable.new
-    @read_count = 0
-    @write_count = 0
-    @write_waiting = 0
+    @reading = 0
+    @writing = 0
+    @writer_waiting = 0
+    @writer_first = false
     return
   end
 
@@ -26,39 +27,41 @@ class ReadWriteLock
 
   def require_read_lock()
     @mutex.synchronize do
-      while @write_count > 0 || @write_waiting > 0
+      while @writing > 0 || (@writer_waiting > 0 && @writer_first)
         @cv.wait @mutex
       end
-      @read_count += 1
+      @reading += 1
     end
     return
   end
 
   def release_read_lock()
     @mutex.synchronize do
-      raise "@read_count corrupted" if @read_count <= 0
-      @read_count -= 1
-      @cv.signal if @read_count == 0
+      raise "@reading corrupted" if @reading <= 0
+      @reading -= 1
+      @writer_first = true
+      @cv.broadcast if @reading == 0
     end
     return
   end
 
   def require_write_lock()
     @mutex.synchronize do
-      @write_waiting += 1
-      while @read_count > 0 || @write_count > 0
+      @writer_waiting += 1
+      while @reading > 0 || @writing > 0
         @cv.wait @mutex
       end
-      @write_waiting -= 1
-      @write_count += 1
+      @writer_waiting -= 1
+      @writing += 1
     end
   end
 
   def release_write_lock()
     @mutex.synchronize do
-      raise "@write_count corrupted" if @write_count != 1
-      @write_count -= 1
-      @cv.signal
+      raise "@writing corrupted" if @writing != 1
+      @writing -= 1
+      @writer_first = false
+      @cv.broadcast
     end
   end
 
