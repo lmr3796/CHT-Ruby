@@ -1,0 +1,76 @@
+# ~/.tmuxinator/cht.yml
+
+name: vm
+root: ~/CHT-Ruby
+
+# Optional tmux socket
+# socket_name: foo
+
+# Runs before everything. Use it to start daemons etc.
+# pre: sudo /etc/rc.d/mysqld start
+
+# Runs in each window and pane before window/pane specific commands. Useful for setting up interpreter versions.
+# pre_window: rbenv shell 2.0.0-p247
+
+# Pass command line options to tmux. Useful for specifying a different tmux.conf.
+# tmux_options: -f ~/.tmux.mac.conf
+
+# Change the command to call tmux.  This can be used by derivatives/wrappers like byobu.
+# tmux_command: byobu
+
+# sh
+pre: i=1; while [ $i -le 14 ]; do ssh cht`printf %02d $i` killall ruby; i=$((i+1)); done
+
+# bash
+# pre: for (( i=1 ; i <= 13 ; i=i+1 )); do ssh cht`printf %02d $i` killall ruby; done # Kills all workers :"")
+windows:
+  - test:
+      layout: main-vertical
+      panes:
+        - cd experiment/thesis
+        - ssh cht14 bash --login -c "'cd ~/CHT-Ruby; ruby dispatcher_runner.rb'"
+        - ssh cht13 bash --login -c "'cd ~/CHT-Ruby; ruby status_checker_runner.rb'"
+        - ssh cht12 bash --login -c "'cd ~/CHT-Ruby; ruby decision_maker_runner.rb'"
+  - workers:
+      layout: tile
+      panes:
+        - 1:
+            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 2:
+            - ssh cht02 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 3:
+            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 4:
+            - ssh cht03 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 5:
+            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 6:
+            - ssh cht04 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 7:
+            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 8:
+            - ssh cht05 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 9:
+            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 10:
+            - ssh cht06 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 11:
+            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 12:
+            - ssh cht07 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 13:
+            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 14:
+            - ssh cht08 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 15:
+            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 16:
+            - ssh cht09 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 17:
+            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 18:
+            - ssh cht10 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
+        - 19:
+            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-1'"
+        - 20:
+            - ssh cht11 bash --login -c "'cd ~/CHT-Ruby; sleep 3; ruby worker_runner.rb -n \`hostname\`-2'"
