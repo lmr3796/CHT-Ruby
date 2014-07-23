@@ -13,7 +13,7 @@ module CHT_Configuration
   end
   module Address
     module DefaultPorts
-      WORKER_DEFAULT_PORT          = 10000
+      WORKER_DEFAULT_PORT          = 20000
       DISPATCHER_DEFAULT_PORT      = 10001
       STATUS_CHECKER_DEFAULT_PORT  = 10002
       DECISION_MAKER_DEFAULT_PORT  = 10003
@@ -37,7 +37,14 @@ module CHT_Configuration
       #'linux14-3' => {:address => 'linux14.csie.org', :port => 20003},
       #'linux14-4' => {:address => 'linux14.csie.org', :port => 20004},
       'localhost1' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT},
-      'localhost2' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+10000},
+      'localhost2' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+2},
+      'localhost3' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+3},
+      'localhost4' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+4},
+      'localhost5' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+5},
+      'localhost6' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+6},
+      'localhost7' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
+      'localhost8' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
+      'localhost9' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
       #'lmr3796-124-2' => {:address => '192.168.10.243', :port => DefaultPorts::WORKER_DEFAULT_PORT},
       #'lmr3796-124-3' => {:address => '192.168.10.123', :port => DefaultPorts::WORKER_DEFAULT_PORT},
       #'lmr3796-124-4' => {:address => '192.168.10.229', :port => DefaultPorts::WORKER_DEFAULT_PORT},
