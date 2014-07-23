@@ -255,6 +255,7 @@ class Worker < BaseServer
           @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
         rescue InvalidAssignmentError
           @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+          # FIXME: What if interrupted here...
         rescue WorkerStateCorruptError => e
           @logger.fatal e.message
           @logger.fatal e.backtrace.join("\n")
