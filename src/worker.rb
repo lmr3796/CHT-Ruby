@@ -184,6 +184,13 @@ class Worker < BaseServer
       @task_ready.signal
       return true
     end
+  rescue WorkerStateCorruptError => e
+    @logger.error e.message
+    @logger.error "Status = #{self.status}"
+    @logger.error "Execution thread task status = #{@task_execution_thr.status}"
+    @logger.error "Execution thread task = #{@task_execution_thr[:task].inspect}"
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
   def validate_state_after_client_submission
@@ -212,12 +219,20 @@ class Worker < BaseServer
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          @preemption_lock.unlock
-          result = run_task(task)
-          @preemption_lock.lock unless @preemption_lock.owned?
+          begin
+            @preemption_lock.unlock
+            result = run_task(task)
+            @preemption_lock.lock unless @preemption_lock.owned?
+          rescue ThreadError => e
+            @logger.error e.message
+            @logger.error e.backtrace.join("\n")
+            system('killall ruby')
+          end
           log_running_time(result.job_id, result.run_time)
           @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
           @result_manager.add_result(client_id, result)
+
+          # Task done
           begin
             @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
             @dispatcher.task_done(result.job_id)
@@ -296,6 +311,10 @@ class Worker < BaseServer
     @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id
     @preemption_lock.unlock
     return
+  rescue ThreadError => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 end
 

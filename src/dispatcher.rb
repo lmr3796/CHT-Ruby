@@ -241,6 +241,7 @@ module Dispatcher::DispatcherClientInterface
     return
   rescue => e
     @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
     @logger.error e.backtrace.join("\n")
     system('killall ruby')
   end
@@ -251,6 +252,7 @@ module Dispatcher::DispatcherClientInterface
     return
   rescue => e
     @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
     @logger.error e.backtrace.join("\n")
     system('killall ruby')
   end
@@ -260,6 +262,7 @@ module Dispatcher::DispatcherClientInterface
     return
   rescue => e
     @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
     @logger.error e.backtrace.join("\n")
     system('killall ruby')
   end
