@@ -85,7 +85,7 @@ class Worker < BaseServer
   end
 
   def assignment
-    return @assignment.value
+    return @assignment.value.clone
   end
 
   # Should only be invoked while Dispatcher#on_worker_available, so there

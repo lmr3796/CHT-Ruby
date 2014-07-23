@@ -1,34 +1,6 @@
 require 'atomic'
 require 'open3'
 
-class Job; end
-
-class Job::Progress
-  attr_reader :queued, :sent, :done
-  def initialize(queued=0, sent=0, done=0)
-    raise ArgumentError unless queued.is_a?(Integer) && queued >= 0
-    raise ArgumentError unless sent.is_a?(Integer) && sent >= 0
-    raise ArgumentError unless done.is_a?(Integer) && done >= 0
-    @queued = queued
-    @sent = sent
-    @done = done
-  end
-
-  def total
-    return @queued + @sent + @done
-  end
-
-  def undone
-    return @queued + @sent
-  end
-
-  def mutate(args = {})
-    default = Hash[:queued, 0, :sent, 0, :done, 0]
-    args = default.merge(args)
-    return Job::Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
-  end
-end
-
 class Job
   attr_reader :task
   attr_accessor :priority, :deadline, :task_running_time_on_worker, :avg_task_running_time
@@ -77,7 +49,7 @@ class Job
   end
 
   def progress
-    return @progress.value
+    return @progress.value.clone
   end
 
   def deadline=(deadline)
@@ -100,6 +72,32 @@ class Job
   def eql?(rhs)
     return false unless rhs.is_a? Job
     return marshal_dump().eql?(rhs.marshal_dump())
+  end
+end
+
+class Job::Progress
+  attr_reader :queued, :sent, :done
+  def initialize(queued=0, sent=0, done=0)
+    raise ArgumentError unless queued.is_a?(Integer) && queued >= 0
+    raise ArgumentError unless sent.is_a?(Integer) && sent >= 0
+    raise ArgumentError unless done.is_a?(Integer) && done >= 0
+    @queued = queued
+    @sent = sent
+    @done = done
+  end
+
+  def total
+    return @queued + @sent + @done
+  end
+
+  def undone
+    return @queued + @sent
+  end
+
+  def mutate(args = {})
+    default = Hash[:queued, 0, :sent, 0, :done, 0]
+    args = default.merge(args)
+    return Job::Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
   end
 end
 
