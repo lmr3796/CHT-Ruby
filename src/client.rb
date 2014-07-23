@@ -45,21 +45,48 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.error "Error contacting worker #{worker_name}"
   rescue ThreadError # On no task to do
     # Workers may finish and come back before we fetch last result and delete job.
-    @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
-    @task_execution_checker.fire
-    @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
-    @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
-    @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size}"
-    @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i}}"
-    @dispatcher.reschedule
-    assignment_valid = worker_server.validate_occupied_assignment
-    worker_server.release(job_id, @uuid) if assignment_valid
+    on_no_task_to_process(job_id, worker_name, worker_server)
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
   ensure
     return
   end
+
+  def on_no_task_to_process(job_id, worker_name, worker_server)
+    @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
+    @task_execution_checker.fire
+    if @dispatcher.has_job?(job_id)
+      begin
+        @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+      rescue Dispatcher::ClientJobList::JobNotExistError
+        @logger.warn "Job doesn't exist on dispatcher. Can't get progress"
+      end
+      @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+      @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
+      @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
+    else
+      @logger.warn "#{job_id} doesn't exist after check."
+    end
+    begin
+      @dispatcher.reschedule
+    rescue DRb::DRbConnError
+      @logger.error "Error contacting dispatcher to reschedule"
+      @logger.error e.backtrace.join("\n")
+    end
+    begin
+      assignment_valid = worker_server.validate_occupied_assignment
+      worker_server.release(@uuid, job_id) if assignment_valid
+    rescue DRb::DRbConnError
+      @logger.error "Error contacting worker to release"
+      @logger.error e.backtrace.join("\n")
+    end
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
+  end
+  private :on_no_task_to_process
 
   def on_task_result_available(m)
     m.is_a? MessageService::Message or raise ArgumentError
