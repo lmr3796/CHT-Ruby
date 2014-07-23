@@ -180,6 +180,12 @@ class Worker < BaseServer
       raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
       raise WorkerStateCorruptError if !@task_execution_thr.stop?
       @logger.debug "#{task.job_id}[#{task.id}] submitted"
+      begin
+        @dispatcher.task_sent(task.job_id)
+        @logger.debug "Notified dispacher for accepting #{task.job_id}[#{task.id}]"
+      rescue DRb::DRbConnError
+        @logger.error "Error notifing dispacher for accepting #{task.job_id}[#{task.id}]"
+      end
       self.status = STATUS::BUSY
       @task_ready.signal
       return true

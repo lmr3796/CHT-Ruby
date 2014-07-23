@@ -152,12 +152,6 @@ class Client
     end
     @execution_assignment[[job_id, task.id]] = worker_server
     @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
-    begin
-      @dispatcher.task_sent(job_id)
-      @logger.debug "Notified dispacher for popping #{job_id}[#{task.id}] to worker #{worker_name}"
-    rescue DRb::DRbConnError
-      @logger.error "Error notifing dispacher for popping #{job_id}[#{task.id}] to worker #{worker_name}"
-    end
     return
   end
   private :submit_task_to_worker
