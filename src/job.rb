@@ -6,9 +6,9 @@ class Job; end
 class Job::Progress
   attr_reader :queued, :sent, :done
   def initialize(queued=0, sent=0, done=0)
-    raise ArgumentError unless queued.is_a? Integer && queued >= 0
-    raise ArgumentError unless sent.is_a? Integer && sent >= 0
-    raise ArgumentError unless done.is_a? Integer && done >= 0
+    raise ArgumentError unless queued.is_a?(Integer) && queued >= 0
+    raise ArgumentError unless sent.is_a?(Integer) && sent >= 0
+    raise ArgumentError unless done.is_a?(Integer) && done >= 0
     @queued = queued
     @sent = sent
     @done = done
@@ -25,7 +25,7 @@ class Job::Progress
   def mutate(args = {})
     default = Hash[:queued, 0, :sent, 0, :done, 0]
     args = default.merge(args)
-    return Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
+    return Job::Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
   end
 end
 
