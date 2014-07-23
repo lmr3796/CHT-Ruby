@@ -53,7 +53,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i}}"
     @dispatcher.reschedule
     assignment_valid = worker_server.validate_occupied_assignment
-    worker_server.release(@uuid) if assignment_valid
+    worker_server.release(job_id, @uuid) if assignment_valid
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
