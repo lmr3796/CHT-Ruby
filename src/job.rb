@@ -4,8 +4,11 @@ require 'open3'
 class Job; end
 
 class Job::Progress
-  attr_accessor :queued, :sent, :done
+  attr_reader :queued, :sent, :done
   def initialize(queued=0, sent=0, done=0)
+    raise ArgumentError unless queued.is_a? Integer && queued >= 0
+    raise ArgumentError unless sent.is_a? Integer && sent >= 0
+    raise ArgumentError unless done.is_a? Integer && done >= 0
     @queued = queued
     @sent = sent
     @done = done
@@ -17,6 +20,12 @@ class Job::Progress
 
   def undone
     return @queued + @sent
+  end
+
+  def mutate(args = {})
+    default = Hash[:queued, 0, :sent, 0, :done, 0]
+    args = default.merge(args)
+    Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
   end
 end
 
@@ -39,39 +48,28 @@ class Job
     t.id = @task.size
     @progress.update do |progress|
       @task << t
-      p = progress.clone
-      p.queued += 1
-      next p
+      next progress.mutate(:queued => +1)
     end
     return
   end
 
   def task_redo
     @progress.update do |progress|
-      p = progress.clone
-      p.sent -= 1
-      p.queued += 1
-      next p
+      next progress.mutate(:sent => -1, :queued => +1)
     end
     return
   end
 
   def task_sent
     @progress.update do |progress|
-      p = progress.clone
-      p.queued -= 1
-      p.sent += 1
-      next p
+      next progress.mutate(:queued => -1, :sent => +1)
     end
     return
   end
 
   def task_done
     @progress.update do |progress|
-      p = progress.clone
-      p.sent -= 1
-      p.done += 1
-      next p
+      next progress.mutate(:sent => -1, :done => +1)
     end
     return
   end
