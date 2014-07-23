@@ -19,5 +19,9 @@ class DecisionMaker < BaseServer
     result.merge!(Hash[job_list.keys.map{|k|[k,[]]}]){|k,old,new| old}
     @logger.info "Scheduled result: #{result}"
     return result
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 end

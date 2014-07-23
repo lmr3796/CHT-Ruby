@@ -131,11 +131,15 @@ class Worker < BaseServer
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
     @logger.debug "Validating assignment"
-    valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
-    valid ?
-      @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
-      @task_execution_thr.raise(InvalidAssignmentError)
-    return valid
+    @mutex.synchronize do
+      valid = @dispatcher.get_assigned_job(@name) == self.assignment.job_id
+      @logger.debug("Assignment of job #{self.assignment.job_id} is #{valid ? 'valid' : 'invalid'}.")
+      if !valid
+        @logger.debug("Release on self validation")
+        @task_execution_thr.raise(InvalidAssignmentError)
+      end
+      return valid
+    end
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
   end
@@ -212,12 +216,18 @@ class Worker < BaseServer
           log_running_time(result.job_id, result.run_time)
           @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
           @result_manager.add_result(client_id, result)
-          @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
-                                                                          :worker => @name,
-                                                                          :job_id => task.job_id,
-                                                                          :task_id => task.id))
+          begin
+            @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
+            @dispatcher.task_done(result.job_id)
+            @logger.debug "Send message to tell client #{client_id} #{result.job_id}[#{result.task_id}] done."
+            @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+                                                                            :worker => @name,
+                                                                            :job_id => task.job_id,
+                                                                            :task_id => task.id))
+          rescue DRb::DRbConnError
+            @logger.error "Error when notifing dispacher #{result.job_id}[#{result.task_id}] done."
+          end
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
-
         rescue PreemptedError
           @logger.warn "#{task.job_id}[#{task.id}] is preempted."
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_preempted,

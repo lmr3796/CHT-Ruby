@@ -25,7 +25,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_name = m.content[:worker]
     return if !@task_queue.has_key?(job_id) # Job outdated; nevermind it.
     @logger.warn "#{job_id}[#{task_id}] on #{worker_name} is preempted."
-    on_result_lost(job_id, task_id)
+    @task_execution_checker.fire
   end
 
   def on_worker_available(m)
@@ -36,18 +36,24 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
-      worker_server.validate_occupied_assignment or worker_server.release(@uuid)
+      raise ThreadError
       return
     end
     task = @task_queue[job_id].pop(true)                              # Nonblocked, raise error if empty
     submit_task_to_worker(job_id, task, worker_name, worker_server)   # Handles DRb::DRbConnError inside
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker_name}"
-  rescue ThreadError # On empty task Queue
+  rescue ThreadError # On no task to do
     # Workers may finish and come back before we fetch last result and delete job.
     @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
+    @task_execution_checker.fire
+    @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+    @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+    @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size}"
+    @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i}}"
     @dispatcher.reschedule
-    worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
+    assignment_valid = worker_server.validate_occupied_assignment
+    worker_server.release(@uuid) if assignment_valid
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
@@ -254,11 +260,6 @@ class Client
 
         # TODO what if poller find out before this???
         @execution_assignment.delete([job_id, r.task_id])
-        begin
-          @dispatcher.task_done(job_id)
-        rescue DRb::DRbConnError
-          @logger.error "Error when notifing dispacher #{job_id}[#{r.task_id}] done."
-        end
         @logger.debug "Updated running status of #{job_id}[#{r.task_id}]"
       end
     end
@@ -295,6 +296,7 @@ class Client
     @task_execution_checker_timer_group = Timers::Group.new
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
       missing_task = check_missing_task
+      next if missing_task.empty?
       @dispatcher.tell_worker_down_detected
       missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
       # Stop polling if no pending jobs

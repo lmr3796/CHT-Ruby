@@ -29,7 +29,14 @@ module SchedulingAlgorithm
         worker_by_throughput = remaining_worker.sort_by{|worker_id| job.task_running_time_on_worker[worker_id]}
         assigned_worker_offset, assigned_worker_size = get_required_worker_range(job_id, job, worker_by_throughput, current_timestamp,
                                                                                  job_running_time, worker_avg_running_time)
-        schedule_result[job_id] += worker_by_throughput.slice!(assigned_worker_offset, assigned_worker_size)
+        begin
+          schedule_result[job_id] += worker_by_throughput.slice!(assigned_worker_offset, assigned_worker_size)
+        rescue
+          @logger.fatal worker_by_throughput
+          @logger.fatal assigned_worker_offset
+          @logger.fatal assigned_worker_size
+          raise
+        end
         remaining_worker = worker_by_throughput
       end
 
@@ -51,6 +58,8 @@ module SchedulingAlgorithm
         @logger.info "No more worker available to schedule"
         return 0, 0
       end
+
+      @logger.debug "Schduling #{job_id}, prgress:#{job.progress.inspect}"
 
       @logger.debug "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
       # If the deadline is already passed, assign as many as workers for the job.

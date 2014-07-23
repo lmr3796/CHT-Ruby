@@ -48,28 +48,30 @@ class Job
     t.id = @task.size
     @progress.update do |progress|
       @task << t
-      next progress.mutate(:queued => +1)
+      progress.mutate(:queued => +1)
     end
     return
   end
 
   def task_redo
     @progress.update do |progress|
-      next progress.mutate(:sent => -1, :queued => +1)
+      progress.mutate(:sent => -1, :queued => +1)
     end
     return
   end
 
   def task_sent
     @progress.update do |progress|
-      next progress.mutate(:queued => -1, :sent => +1)
+      raise 'No queued task' if progress.queued == 0
+      progress.mutate(:queued => -1, :sent => +1)
     end
     return
   end
 
   def task_done
     @progress.update do |progress|
-      next progress.mutate(:sent => -1, :done => +1)
+      raise 'No sent task to be done' if progress.sent == 0
+      progress.mutate(:sent => -1, :done => +1)
     end
     return
   end
