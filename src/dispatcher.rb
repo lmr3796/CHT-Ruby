@@ -55,6 +55,13 @@ class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
 end
 
 class Dispatcher::ClientJobList < ReadWriteLockHash
+  class JobNotExistError < RuntimeError; end
+
+  def [](job_id)
+    raise JobNotExistError if !has_key?(job_id)
+    return super(job_id)
+  end
+
   def get_client_by_job(job_id)
     hash_clone.each{|c, jl| return c if jl.include?(job_id)}
     return
@@ -168,6 +175,11 @@ class Dispatcher < BaseServer
     queue_status = @job_worker_queues.map{|j,wq| [j, "#{wq.size} wrks, #{wq.num_waiting} waiting"]}
     @logger.warn "Current queue status: #{queue_status}"
     return
+  end
+
+  def has_job?(job_id)
+    raise ArgumentError if job_id == nil
+    return @job_list.has_key? job_id
   end
 
 end
