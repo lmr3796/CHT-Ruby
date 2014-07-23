@@ -91,6 +91,7 @@ class Worker < BaseServer
   # Should only be invoked while Dispatcher#on_worker_available, so there
   # shouldn't be any race condition here.
   def assignment=(a)
+    @mutex.synchronize do
     a.is_a? JobAssignment or raise ArgumentError
     @assignment.update do |_|
       @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
@@ -105,6 +106,7 @@ class Worker < BaseServer
       @task_execution_thr.run
     end
     return
+    end
   end
 
   def tell_client_ready(client_id, job_id)
@@ -249,9 +251,9 @@ class Worker < BaseServer
           # Can't set them to nil before preemption done
           @preemption_lock.lock unless @preemption_lock.owned?
           Thread.current[:task] = Thread.current[:client_id] = nil
-          self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
         end
       end
+      self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
     end
   end
 

@@ -275,7 +275,7 @@ module Dispatcher::DispatcherClientInterface
   end
 end
 
-module Dispatcher::DispatcherWorkerInterface 
+module Dispatcher::DispatcherWorkerInterface
   def get_assigned_job(worker)
     return @schedule_manager.worker_job_table[worker]
   end
