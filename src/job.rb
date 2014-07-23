@@ -20,42 +20,30 @@ class Job
     t.id = @task.size
     @progress.update do |progress|
       @task << t
-      p = progress.clone
-      p.queued += 1
-      p
+      progress.mutate(:queued => +1)
     end
     return
   end
 
   def task_redo
     @progress.update do |progress|
-      p = progress.clone
-      raise 'No sent task to redo' if p.sent == 0
-      p.sent -= 1
-      p.queued += 1
-      p
+      progress.mutate(:sent => -1, :queued => +1)
     end
     return
   end
 
   def task_sent
     @progress.update do |progress|
-      p = progress.clone
-      raise 'No queued task' if p.queued == 0
-      p.queued -= 1
-      p.sent += 1
-      p
+      raise 'No queued task' if progress.queued == 0
+      progress.mutate(:queued => -1, :sent => +1)
     end
     return
   end
 
   def task_done
     @progress.update do |progress|
-      p = progress.clone
-      raise 'No sent task to be done' if p.sent == 0
-      p.sent -= 1
-      p.done += 1
-      p
+      raise 'No sent task to be done' if progress.sent == 0
+      progress.mutate(:sent => -1, :done => +1)
     end
     return
   end
@@ -88,8 +76,11 @@ class Job
 end
 
 class Job::Progress
-  attr_accessor :queued, :sent, :done
+  attr_reader :queued, :sent, :done
   def initialize(queued=0, sent=0, done=0)
+    raise ArgumentError unless queued.is_a? Integer && queued >= 0
+    raise ArgumentError unless sent.is_a? Integer && sent >= 0
+    raise ArgumentError unless done.is_a? Integer && done >= 0
     @queued = queued
     @sent = sent
     @done = done
@@ -101,6 +92,12 @@ class Job::Progress
 
   def undone
     return @queued + @sent
+  end
+
+  def mutate(args = {})
+    default = Hash[:queued, 0, :sent, 0, :done, 0]
+    args = default.merge(args)
+    return Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
   end
 end
 
