@@ -3,8 +3,11 @@ require 'thread'
 class ReadWriteLock
   def initialize()
     @mutex = Mutex.new
-    @rwlock = Mutex.new
-    @read_count = 0
+    @cv = ConditionVariable.new
+    @reading = 0
+    @writing = 0
+    @writer_waiting = 0
+    @writer_first = false
     return
   end
 
@@ -24,28 +27,42 @@ class ReadWriteLock
 
   def require_read_lock()
     @mutex.synchronize do
-      @rwlock.lock if @read_count == 0
-      @read_count += 1
+      while @writing > 0 || (@writer_waiting > 0 && @writer_first)
+        @cv.wait @mutex
+      end
+      @reading += 1
     end
     return
   end
 
   def release_read_lock()
     @mutex.synchronize do
-      raise "@read_count corrupted" if @read_count <= 0
-      @read_count -= 1
-      @rwlock.unlock if @read_count == 0
+      raise "@reading corrupted" if @reading <= 0
+      @reading -= 1
+      @writer_first = true
+      @cv.broadcast if @reading == 0
     end
     return
   end
 
   def require_write_lock()
-    return @rwlock.lock
+    @mutex.synchronize do
+      @writer_waiting += 1
+      while @reading > 0 || @writing > 0
+        @cv.wait @mutex
+      end
+      @writer_waiting -= 1
+      @writing += 1
+    end
   end
 
   def release_write_lock()
-    @rwlock.unlock
-    return
+    @mutex.synchronize do
+      raise "@writing corrupted" if @writing != 1
+      @writing -= 1
+      @writer_first = false
+      @cv.broadcast
+    end
   end
 
   private :require_read_lock, :require_write_lock,

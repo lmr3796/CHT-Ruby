@@ -325,7 +325,7 @@ class Client
 
   def check_missing_task
     missing = []
-    ass = Hash.new.merge(@execution_assignment) # each is not implemented with rwlock...
+    ass = @execution_assignment.hash_clone # each is not implemented with rwlock...
     ass.each do |j_and_t, worker_server|
       # Workers may be failed here
       job_id, task_id = j_and_t
