@@ -190,7 +190,7 @@ class Worker < BaseServer
     @logger.error "Execution thread task status = #{@task_execution_thr.status}"
     @logger.error "Execution thread task = #{@task_execution_thr[:task].inspect}"
     @logger.error e.backtrace.join("\n")
-    system('killall ruby')
+    return false
   end
 
   def validate_state_after_client_submission
