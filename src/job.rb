@@ -25,7 +25,7 @@ class Job::Progress
   def mutate(args = {})
     default = Hash[:queued, 0, :sent, 0, :done, 0]
     args = default.merge(args)
-    Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
+    return Progress.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
   end
 end
 
