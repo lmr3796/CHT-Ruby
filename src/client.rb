@@ -110,19 +110,27 @@ class Client
     raise ArgumentError if job_id == nil
     raise ArgumentError if task == nil
     raise ArgumentError if worker_server== nil
-    if worker_server.submit_task(task, @uuid)
-      @dispatcher.task_sent(job_id)
-      @execution_assignment[[job_id, task.id]] = worker_server
-      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
-    else
-      # On submission rejected
+    submission_status = nil
+    begin
+      submission_status = worker_server.submit_task(task, @uuid)
+    rescue DRb::DRbConnError
+      @logger.error "Error contacting worker #{worker_name} to submit the task."
+    end
+
+    if !submission_status
+      # On submission rejected or failed
       @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
       redo_task(job_id, task.id)
+      return
     end
-    return
-  rescue DRb::DRbConnError
-    @logger.error "Error contacting worker #{worker_name} to submit the task."
-    redo_task(job_id, task.id)
+    @execution_assignment[[job_id, task.id]] = worker_server
+    @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
+    begin
+      @dispatcher.task_sent(job_id)
+      @logger.debug "Notified dispacher for popping #{job_id}[#{task.id}] to worker #{worker_name}"
+    rescue DRb::DRbConnError
+      @logger.error "Error notifing dispacher for popping #{job_id}[#{task.id}] to worker #{worker_name}"
+    end
     return
   end
   private :submit_task_to_worker
