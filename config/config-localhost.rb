@@ -45,6 +45,17 @@ module CHT_Configuration
       'localhost7' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
       'localhost8' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
       'localhost9' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
+      'localhost10' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+10},
+      'localhost11' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+11},
+      'localhost12' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+12},
+      'localhost13' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+13},
+      'localhost14' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+14},
+      'localhost15' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+15},
+      'localhost16' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+16},
+      'localhost17' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+17},
+      'localhost18' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+18},
+      'localhost19' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+19},
+      'localhost20' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+20},
       #'lmr3796-124-2' => {:address => '192.168.10.243', :port => DefaultPorts::WORKER_DEFAULT_PORT},
       #'lmr3796-124-3' => {:address => '192.168.10.123', :port => DefaultPorts::WORKER_DEFAULT_PORT},
       #'lmr3796-124-4' => {:address => '192.168.10.229', :port => DefaultPorts::WORKER_DEFAULT_PORT},
@@ -57,5 +68,5 @@ module CHT_Configuration
   end
 
   STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
-  LOGGER_LEVEL = Logger::INFO # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]
+  LOGGER_LEVEL = Logger::DEBUG # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]
 end
