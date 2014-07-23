@@ -225,31 +225,10 @@ class Worker < BaseServer
 
           # Task submitted. Run!!!
           task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          begin
-            @preemption_lock.unlock
-            result = run_task(task)
-            @preemption_lock.lock unless @preemption_lock.owned?
-          rescue ThreadError => e
-            @logger.error e.message
-            @logger.error e.backtrace.join("\n")
-            system('killall ruby')
-          end
-          log_running_time(result.job_id, result.run_time)
-          @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
-          @result_manager.add_result(client_id, result)
+          result = run_task_and_log(task, client_id)
 
           # Task done
-          begin
-            @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
-            @dispatcher.task_done(result.job_id)
-            @logger.debug "Send message to tell client #{client_id} #{result.job_id}[#{result.task_id}] done."
-            @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
-                                                                            :worker => @name,
-                                                                            :job_id => task.job_id,
-                                                                            :task_id => task.id))
-          rescue DRb::DRbConnError
-            @logger.error "Error when notifing dispacher #{result.job_id}[#{result.task_id}] done."
-          end
+          post_execution(result, client_id)
           raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
         rescue PreemptedError
           @logger.warn "#{task.job_id}[#{task.id}] is preempted."
@@ -279,12 +258,34 @@ class Worker < BaseServer
     end
   end
 
+  def run_task_and_log(task, client_id)
+    @preemption_lock.unlock
+    result = run_task(task)
+    @preemption_lock.lock unless @preemption_lock.owned?
+    log_running_time(result.job_id, result.run_time)
+    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
+    @result_manager.add_result(client_id, result)
+    return result
+  end
+
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     @logger.info "#{task.job_id}[#{task.id}] running."
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
     result = task.run
     return result
+  end
+
+  def post_execution(result, client_id)
+    @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
+    @dispatcher.task_done(result.job_id)
+    @logger.debug "Send message to tell client #{client_id} #{result.job_id}[#{result.task_id}] done."
+    @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+                                                                    :worker => @name,
+                                                                    :job_id => result.job_id,
+                                                                    :task_id => result.task_id))
+  rescue DRb::DRbConnError
+    @logger.error "Error when notifing dispacher #{result.job_id}[#{result.task_id}] done."
   end
 
   # TODO: lower the cost of get_result
