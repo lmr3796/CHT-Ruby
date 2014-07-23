@@ -71,4 +71,21 @@ class ReadWriteLockHash
     @rwlock = rwlock
     return rwlock
   end
+
+  def select(*args)
+    return @rwlock.with_read_lock{@hash.select(*args)}
+  end
+
+  def reject(*args)
+    return @rwlock.with_read_lock{@hash.reject(*args)}
+  end
+
+  def select!(*args)
+    return @rwlock.with_write_lock{@hash.select!(*args)}
+  end
+
+  def reject!(*args)
+    return @rwlock.with_write_lock{@hash.reject!(*args)}
+  end
+
 end
