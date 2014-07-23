@@ -26,7 +26,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
-      worker_server.validate_occupied_assignment or worker_server.release(@uuid)
+      worker_server.validate_occupied_assignment or worker_server.release(job_id, @uuid)
       return
     end
     task = @task_queue[job_id].pop(true)                              # Nonblocked, raise error if empty
