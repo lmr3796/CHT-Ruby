@@ -77,7 +77,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     begin
       assignment_valid = worker_server.validate_occupied_assignment
       worker_server.release(@uuid, job_id) if assignment_valid
-    rescue DRb::DRbConnError
+    rescue DRb::DRbConnError => e
       @logger.error "Error contacting worker to release"
       @logger.error e.backtrace.join("\n")
     end
