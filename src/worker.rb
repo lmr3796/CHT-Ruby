@@ -144,6 +144,7 @@ class Worker < BaseServer
     end
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
+    return false
   end
 
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
@@ -255,6 +256,7 @@ class Worker < BaseServer
           @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
         rescue InvalidAssignmentError
           @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+          sleep 1;  # To reduce message overhead on release loop...
         rescue WorkerStateCorruptError => e
           @logger.fatal e.message
           @logger.fatal e.backtrace.join("\n")
