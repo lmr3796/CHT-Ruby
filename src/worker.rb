@@ -135,18 +135,23 @@ class Worker < BaseServer
 
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
+    @logger.warn "Can't lock @mutex, not in a state to validate" and return true if !@mutex.try_lock
+
+    # @mutex locked
+    @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
     @logger.debug "Validating assignment"
-    @mutex.synchronize do
-      valid = @dispatcher.get_assigned_job(@name) == self.assignment.job_id
-      @logger.debug("Assignment of job #{self.assignment.job_id} is #{valid ? 'valid' : 'invalid'}.")
-      if !valid
-        @logger.debug("Release on self validation")
-        @task_execution_thr.raise(InvalidAssignmentError)
-      end
-      return valid
+    valid = @dispatcher.get_assigned_job(@name) == self.assignment.job_id
+    @logger.debug("Assignment of job #{self.assignment.job_id} is #{valid ? 'valid' : 'invalid'}.")
+    if !valid
+      @logger.debug("Release on self validation")
+      # Prevents from reraise in rescue...
+      @task_execution_thr.raise(InvalidAssignmentError, 'Invalid on self validation')
     end
+    return valid
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
+  ensure
+    @mutex.unlock if @mutex.owned?
   end
 
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
