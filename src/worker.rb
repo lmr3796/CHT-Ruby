@@ -126,7 +126,7 @@ class Worker < BaseServer
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
     @logger.debug "Awoken to fetch new assignment"
     next_job_assigned = fetch_assignment
-    @logger.debug "Fetched #{next_job_assigned.inspect}" if next_job_assigned != nil
+    @logger.debug "Fetched #{next_job_assigned.inspect}"
     return
   end
 
@@ -317,7 +317,7 @@ class Worker < BaseServer
 
   def preempt_if_unmatch(job_id)
     return unless @preemption_lock.try_lock # If we can't lock it, it means it's not running a task
-    @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id
+    @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id rescue nil
     @preemption_lock.unlock
     return
   rescue ThreadError => e

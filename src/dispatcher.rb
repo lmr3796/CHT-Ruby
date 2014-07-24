@@ -291,6 +291,7 @@ module Dispatcher::DispatcherClientInterface
 end
 
 module Dispatcher::DispatcherWorkerInterface
+  RESCHEDULE_MAX_TRY = 3
   def get_assigned_job(worker)
     return @schedule_manager.worker_job_table[worker]
   end
@@ -298,13 +299,21 @@ module Dispatcher::DispatcherWorkerInterface
   # Returns next job assignment
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
-    next_job_assigned = nil
-    # Detect if it's a trailing one, if so then reschedule without notifications.
-    @resource_mutex.synchronize do
-      next_job_assigned = get_assigned_job(worker)
-      next if next_job_assigned == nil
-      assign_worker_to_job(worker, next_job_assigned)
+    next_job_assigned = @resource_mutex.synchronize do
+      # Detect if it's a trailing one, if so then reschedule without notifications.
+      job_id = nil
+      RESCHEDULE_MAX_TRY.times do
+        job_id = get_assigned_job(worker)
+        break if job_id == nil
+        undone_cnt = get_progress(job_id).undone.size rescue nil
+        next if undone_cnt == nil
+        break if undone_cnt >= @schedule_manager.job_worker_table[job_id].size
+        @logger.info "Trailing worker #{worker} for #{job_id}, update schedule without notification."
+        reschedule
+      end
+      next job_id
     end
+    assign_worker_to_job(worker, next_job_assigned) if next_job_assigned != nil
     return next_job_assigned
   end
 end
