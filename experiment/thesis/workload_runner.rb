@@ -18,6 +18,7 @@ module WorkloadRunner
     client = Client.new(dispatcher_uri, logger)
     client.register
     client.start
+    merged_batch[0][:wait_time] = 0 # Sleep at beginning is stupid...
     merged_batch.each do |b|
       logger.debug "Sleep for #{b[:wait_time]}"
       sleep b[:wait_time]
