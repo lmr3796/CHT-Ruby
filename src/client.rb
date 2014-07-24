@@ -358,6 +358,20 @@ class Client
   end
   private :run_periodic_task_execution_checker
 
+  def try_collect_result_of(job_id)
+    results = []
+    @execution_assignment.hash_clone.select{|j_and_t,_| j_and_t[0] == job_id}.each do |j_and_t, worker_server|
+      task_id = j_and_t[1]
+      begin
+        results += worker_server.get_results(@uuid, job_id) if worker_server.exist_result?(job_id, task_id, @uuid)
+      rescue DRb::DRbConnError
+        @logger.error "Error contacting worker to fetch result of #{job_id}[#{task_id}]"
+      end
+    end
+    add_results(results, job_id)
+    return
+  end
+
   def check_missing_task
     missing = []
     # each is not implemented with rwlock...
