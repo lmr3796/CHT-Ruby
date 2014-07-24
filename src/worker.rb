@@ -147,6 +147,7 @@ class Worker < BaseServer
   end
 
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
+    @logger.warn "Not occupied, no need to release" and return if @status != STATUS::OCCUPIED
     if self.assignment.client_id != client_id || self.assignment.job_id != job_id
       @logger.error("Invalid caller client: #{client_id}")
       return false
