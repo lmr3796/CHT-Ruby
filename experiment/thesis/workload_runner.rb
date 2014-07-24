@@ -67,3 +67,4 @@ finish_time = result[:finish_time]
 jobs = result[:jobs]
 raise "Output failed." if $options[:output].write(dump) != dump.size
 puts "#{finish_time.select{|j, t| jobs[j].deadline >= t}.size} out of #{jobs.size} jobs met deadline."
+exit  #FIXME: zombie thread issue QQ
