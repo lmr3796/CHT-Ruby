@@ -399,6 +399,9 @@ class Client
     # In this case, we've already told dispatcher task sent, so tell it to redo is necessary
     @dispatcher.task_redo(job_id, task_id)
     return
+  rescue DRb::DRbConnError
+    @logger.error "Error notifing dispatcher for redo #{job_id}[#{task_id}]"
+  rescue Dispatcher::JobList::JobNotExistError
   end
 
   def task_redo(job_id, task_id)

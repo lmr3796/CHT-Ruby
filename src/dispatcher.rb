@@ -27,11 +27,18 @@ end
 
 class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
   extend Publisher
+  class JobNotExistError < RuntimeError; end
   can_fire :submission, :deletion
+
   def initialize(logger)
     super()
     @logger = logger
     return
+  end
+
+  def [](job_id)
+    raise JobNotExistError if !has_key?(job_id)
+    return super(job_id)
   end
 
   def []=(job_id, job)
@@ -54,14 +61,7 @@ class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
   end
 end
 
-class Dispatcher::ClientJobList < ReadWriteLockHash
-  class JobNotExistError < RuntimeError; end
-
-  def [](job_id)
-    raise JobNotExistError if !has_key?(job_id)
-    return super(job_id)
-  end
-
+class Dispatcher::JobListByClient < ReadWriteLockHash
   def get_client_by_job(job_id)
     hash_clone.each{|c, jl| return c if jl.include?(job_id)}
     return
@@ -135,7 +135,7 @@ class Dispatcher < BaseServer
     @decision_maker = arg[:decision_maker]
     @msg_service_server = MessageService::BasicServer.new
 
-    @client_job_list = ClientJobList.new
+    @client_job_list = JobListByClient.new
     @job_list = JobList.new @logger
     @schedule_manager = ScheduleManager.new(@job_list,
                                             :status_checker => @status_checker,
@@ -251,6 +251,9 @@ module Dispatcher::DispatcherClientInterface
     @logger.warn "#{job_id}[#{task_id}] needs redo, reschedule"
     reschedule
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
   rescue => e
     @logger.error e.message
     @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
@@ -262,6 +265,9 @@ module Dispatcher::DispatcherClientInterface
     @job_list[job_id].task_sent(task_id)
     # TODO: Release tail ones!!!
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
   rescue => e
     @logger.error e.message
     @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
@@ -272,6 +278,9 @@ module Dispatcher::DispatcherClientInterface
   def task_done(job_id, task_id)
     @job_list[job_id].task_done(task_id)
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
   rescue => e
     @logger.error e.message
     @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
