@@ -81,6 +81,9 @@ class Worker < BaseServer
     when STATUS::AVAILABLE
       fetch_assignment
     end
+  rescue DRbConnError
+    @logger.error "Error contacting status checker to mark status"
+  ensure
     return s
   end
 
