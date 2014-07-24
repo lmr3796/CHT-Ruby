@@ -64,7 +64,7 @@ class Job
   def marshal_load(array)
     @task, @priority, @deadline, @task_running_time_on_worker, @progress = array
     @deadline = Time.at(deadline)
-    @progress = Atomic.new(Job::Progress.new(@task.size)) rescue Atomic.new(Job::Progress.new([Job::Progress::JobState::QUEUED] * @task.size))
+    @progress = Atomic.new(Job::Progress.new(@progress))
   end
 
   def eql?(rhs)
