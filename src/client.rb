@@ -370,7 +370,8 @@ class Client
       @logger.warn "#{job_id} doesn't exist."
     end
     @task_execution_checker.fire
-
+    try_collect_result_of(job_id)
+    job_done(job_id) if !@results[job_id].include? nil
 
     @logger.warn "After check"
     if @dispatcher.has_job?(job_id)
