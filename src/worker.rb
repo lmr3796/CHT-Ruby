@@ -241,6 +241,7 @@ class Worker < BaseServer
         rescue InvalidAssignmentError
           @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
           # FIXME: What if interrupted here...
+          #sleep 1
         rescue WorkerStateCorruptError => e
           @logger.fatal e.message
           @logger.fatal e.backtrace.join("\n")

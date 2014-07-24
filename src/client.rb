@@ -183,7 +183,6 @@ class Client
     raise ArgumentError if !job_id_list.is_a? Array
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-    @logger.debug "Checking on #{job_id_list}"
     job_id_list.each{|j| return false unless @job_done[j]}
     return true
   rescue ArgumentError
