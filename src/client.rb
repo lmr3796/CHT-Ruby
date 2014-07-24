@@ -288,17 +288,7 @@ class Client
   def run_periodic_task_execution_checker
     @task_execution_checker_timer_group = Timers::Group.new
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
-      missing_task = check_missing_task
-      next if missing_task.empty?
-      @dispatcher.tell_worker_down_detected
-      missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
-      # Stop polling if no pending jobs
-      @rwlock.with_write_lock do
-        if done?(@submitted_jobs.keys)
-          @logger.warn "No pending jobs, no need to check for results"
-          @task_execution_checker.pause
-        end
-      end
+      check_execution
     end
     @timer_thr = Thread.new do
       loop do
@@ -308,29 +298,21 @@ class Client
   end
   private :run_periodic_task_execution_checker
 
-  def try_collect_result_of(job_id)
-    results = []
-    @execution_assignment.hash_clone.select{|j_and_t,_| j_and_t[0] == job_id}.each do |j_and_t, worker_server|
-      task_id = j_and_t[1]
-      begin
-        results += worker_server.get_results(@uuid, job_id) if worker_server.exist_result?(job_id, task_id, @uuid)
-      rescue DRb::DRbConnError
-        @logger.error "Error contacting worker to fetch result of #{job_id}[#{task_id}]"
-      end
-    end
-    add_results(results, job_id)
-    return
-  end
-
-  def check_missing_task
+  def check_execution
     missing = []
-    # each is not implemented with rwlock...
+    result_ready = []
+    results = {}
+
     @execution_assignment.hash_clone.each do |j_and_t, worker_server|
-      # Workers may be failed here
       job_id, task_id = j_and_t
       begin
-        missing << j_and_t if worker_server.current_execution_of(@uuid) != j_and_t &&
-          !worker_server.exist_result?(job_id, task_id, @uuid)
+        if worker_server.exist_result?(job_id, task_id, @uuid)
+          result_ready << j_and_t
+        elsif worker_server.current_execution_of(@uuid) != j_and_t
+          missing << j_and_t
+        else
+          next  # Result not ready, still excuting
+        end
       rescue DRb::DRbConnError => e
         @logger.error "Worker is found down, take it as lost."
         @logger.error e.message
@@ -340,7 +322,32 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
-    return missing
+    result_ready.each do |job_id, task_id|
+      begin
+        results[job_id] = [] if !results.has_key?(job_id)
+        results[job_id] += @execution_assignment[[job_id, task_id]].get_results(@uuid, job_id)
+      rescue DRb::DRbConnError
+        @logger.error "Error contacting worker to fetch result of #{job_id}[#{task_id}], take it as lost."
+        missing << j_and_t
+      rescue => e
+        @logger.error e.message
+        @logger.error e.backtrace.join("\n")
+      end
+    end
+    results.each do |job_id, result_list|
+      add_results(result_list, job_id)
+      job_done(job_id) if !@results[job_id].include? nil
+    end
+    missing.each{|job_id, task_id| on_result_lost(job_id, task_id)}
+    @dispatcher.tell_worker_down_detected if !missing.empty?
+
+    # Pause polling if no pending jobs
+    @rwlock.with_write_lock do
+      if done?(@submitted_jobs.keys)
+        @logger.warn "No pending jobs, no need to check for results"
+        @task_execution_checker.pause
+      end
+    end
   end
 
   def on_result_lost(job_id, task_id)
@@ -370,8 +377,6 @@ class Client
       @logger.warn "#{job_id} doesn't exist."
     end
     @task_execution_checker.fire
-    try_collect_result_of(job_id)
-    job_done(job_id) if !@results[job_id].include? nil
 
     @logger.warn "After check"
     if @dispatcher.has_job?(job_id)
