@@ -218,53 +218,57 @@ class Worker < BaseServer
   # FIXME: @preemption_lock is a dirty hack...
   def start
     loop do
-      @preemption_lock.lock unless @preemption_lock.owned?
-      Thread::stop if @status == STATUS::AVAILABLE
-      @mutex.synchronize do  # Worker is dedicated
+      begin
+        operate_state
+      rescue InvalidAssignmentError => e
+        @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+        @logger.warn e.message
+      end
+    end
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby') # FIXME: remove this
+  end
+
+  def operate_state
+    self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
+    @preemption_lock.lock unless @preemption_lock.owned?
+    Thread.current[:task] = Thread.current[:client_id] = nil
+    Thread::stop if @status == STATUS::AVAILABLE
+    @mutex.synchronize do  # Worker is dedicated
+      begin
+        # Must be OCCUPIED here and client waits for client to submit a task
+        raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
+        a = self.assignment
+        @task_ready = ConditionVariable.new
+        tell_client_ready(a.client_id, a.job_id)
+        @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
+        validate_state_after_client_submission
+
+        # Task submitted. Run!!!
+        task, client_id = [Thread.current[:task], Thread.current[:client_id]]
+        result = run_task_and_log(task, client_id)
+
+        # Task done
+        post_execution(result, client_id)
+        raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
+      rescue PreemptedError
+        @logger.warn "#{task.job_id}[#{task.id}] is preempted."
         begin
-          # Must be OCCUPIED here and client waits for client to submit a task
-          raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
-
-          a = self.assignment
-          @task_ready = ConditionVariable.new
-          tell_client_ready(a.client_id, a.job_id)
-          #Timeout::timeout(DEFAULT_TIMEOUT)  # TODO: Maybe enable this in production....
-          @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
-          validate_state_after_client_submission
-
-          # Task submitted. Run!!!
-          task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          result = run_task_and_log(task, client_id)
-
-          # Task done
-          post_execution(result, client_id)
-          raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
-        rescue PreemptedError
-          @logger.warn "#{task.job_id}[#{task.id}] is preempted."
           @dispatcher.push_message(client_id, MessageService::Message.new(:task_preempted,
                                                                           :worker => @name,
                                                                           :job_id => task.job_id,
                                                                           :task_id => task.id))
-        rescue Timeout::Error
-          @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
-        rescue InvalidAssignmentError
-          @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
-          # FIXME: What if interrupted here...
-          #sleep 1
-        rescue WorkerStateCorruptError => e
-          @logger.fatal e.message
-          @logger.fatal e.backtrace.join("\n")
-          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
-        rescue => e
-          @logger.error e.message
-          @logger.error e.backtrace.join("\n")
-        ensure
-          # Can't set them to nil before preemption done
-          @preemption_lock.lock unless @preemption_lock.owned?
-          Thread.current[:task] = Thread.current[:client_id] = nil
+        rescue DRb::DRbConnError
+          @logger.error "Error pushing message to client to tell #{task.job_id}[#{task.id}] is preempted."
         end
+      rescue WorkerStateCorruptError => e
+        @logger.fatal e.message
+        @logger.fatal e.backtrace.join("\n")
+      ensure
+        @status = STATUS::AVAILABLE
       end
-      self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
     end
   end
 
