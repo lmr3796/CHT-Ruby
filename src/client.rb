@@ -147,7 +147,7 @@ class Client
     if !submission_status
       # On submission rejected or failed
       @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
-      redo_task(job_id, task.id)
+      task_redo(job_id, task.id)
       return
     end
     @execution_assignment[[job_id, task.id]] = worker_server
@@ -366,13 +366,13 @@ class Client
 
   def on_result_lost(job_id, task_id)
     @logger.warn "Result of #{job_id}[#{task_id}] lost or preempted, asked to redo"
-    redo_task(job_id, task_id)
+    task_redo(job_id, task_id)
     # In this case, we've already told dispatcher task sent, so tell it to redo is necessary
-    @dispatcher.redo_task(job_id)
+    @dispatcher.task_redo(job_id, task_id)
     return
   end
 
-  def redo_task(job_id, task_id)
+  def task_redo(job_id, task_id)
     @execution_assignment.delete([job_id, task_id])
     @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
     return

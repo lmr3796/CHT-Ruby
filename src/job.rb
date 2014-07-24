@@ -25,25 +25,23 @@ class Job
     return
   end
 
-  def task_redo
+  def task_redo(task_id)
     @progress.update do |progress|
-      progress.mutate(:sent => -1, :queued => +1)
+      progress.task_redo(task_id)
     end
     return
   end
 
-  def task_sent
+  def task_sent(task_id)
     @progress.update do |progress|
-      raise 'No queued task' if progress.queued == 0
-      progress.mutate(:queued => -1, :sent => +1)
+      progress.task_sent(task_id)
     end
     return
   end
 
-  def task_done
+  def task_done(task_id)
     @progress.update do |progress|
-      raise 'No sent task to be done' if progress.sent == 0
-      progress.mutate(:sent => -1, :done => +1)
+      progress.task_done(task_id)
     end
     return
   end
@@ -66,7 +64,7 @@ class Job
   def marshal_load(array)
     @task, @priority, @deadline, @task_running_time_on_worker, @progress = array
     @deadline = Time.at(deadline)
-    @progress = Atomic.new(@progress)
+    @progress = Atomic.new(Job::Progress.new(@task.size)) rescue Atomic.new(Job::Progress.new([Job::Progress::JobState::QUEUED] * @task.size))
   end
 
   def eql?(rhs)
@@ -77,27 +75,69 @@ end
 
 class Job::Progress
   attr_reader :queued, :sent, :done
-  def initialize(queued=0, sent=0, done=0)
-    raise ArgumentError unless queued.is_a?(Integer) && queued >= 0
-    raise ArgumentError unless sent.is_a?(Integer) && sent >= 0
-    raise ArgumentError unless done.is_a?(Integer) && done >= 0
-    @queued = queued
-    @sent = sent
-    @done = done
+  class InconsistentUpdateError < RuntimeError;end
+  module JobState
+    QUEUED=:QUEUED
+    SENT=:SENT
+    DONE=:DONE
+  end
+
+  def clone
+    return self.class.new(self)
+  end
+
+  def initialize(job_status=[])
+    job_status = job_status.job_status if job_status.is_a?(self.class)
+    raise ArgumentError unless job_status.is_a?(Array)
+    @job_status = job_status.clone
+    return
+  end
+
+  def [](task_id)
+    return @job_status[task_id]
+  end
+
+  def job_status
+    return @job_status.clone
+  end
+
+  def add_task
+    @job_status << JobState::QUEUED
+  end
+
+  def task_sent(task_id)
+    @job_status[task_id] = JobState::SENT
+    return self
+  end
+
+  def task_done(task_id)
+    @job_status[task_id] = JobState::DONE
+    return self
+  end
+
+  def task_redo(task_id)
+    @job_status[task_id] = JobState::QUEUED
+    return self
   end
 
   def total
-    return @queued + @sent + @done
+    return @job_status.size
+  end
+
+  def queued
+    return @job_status.each_with_index.select{|s, i| s == JobState::QUEUED}.map{|s,i| i}
+  end
+
+  def sent
+    return @job_status.each_with_index.select{|s, i| s == JobState::SENT}.map{|s,i| i}
+  end
+
+  def done
+    return @job_status.each_with_index.select{|s, i| s == JobState::DONE}.map{|s,i| i}
   end
 
   def undone
-    return @queued + @sent
-  end
-
-  def mutate(args = {})
-    default = Hash[:queued, 0, :sent, 0, :done, 0]
-    args = default.merge(args)
-    return self.class.new(@queued + args[:queued], @sent + args[:sent], @done + args[:done])
+    return @job_status.each_with_index.select{|s, i| s != JobState::DONE}.map{|s,i| i}
   end
 end
 

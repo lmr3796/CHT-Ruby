@@ -246,9 +246,9 @@ module Dispatcher::DispatcherClientInterface
     return
   end
 
-  def redo_task(job_id)
-    @job_list[job_id].task_redo
-    @logger.warn "A task of #{job_id} needs redo, reschedule"
+  def task_redo(job_id, task_id)
+    @job_list[job_id].task_redo(task_id)
+    @logger.warn "#{job_id}[#{task_id}] needs redo, reschedule"
     reschedule
     return
   rescue => e
@@ -258,8 +258,8 @@ module Dispatcher::DispatcherClientInterface
     system('killall ruby')
   end
 
-  def task_sent(job_id)
-    @job_list[job_id].task_sent
+  def task_sent(job_id, task_id)
+    @job_list[job_id].task_sent(task_id)
     # TODO: Release tail ones!!!
     return
   rescue => e
@@ -269,8 +269,8 @@ module Dispatcher::DispatcherClientInterface
     system('killall ruby')
   end
 
-  def task_done(job_id)
-    @job_list[job_id].task_done
+  def task_done(job_id, task_id)
+    @job_list[job_id].task_done(task_id)
     return
   rescue => e
     @logger.error e.message
@@ -299,6 +299,7 @@ module Dispatcher::DispatcherWorkerInterface
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
     next_job_assigned = nil
+    # Detect if it's a trailing one, if so then reschedule without notifications.
     @resource_mutex.synchronize do
       next_job_assigned = get_assigned_job(worker)
       next if next_job_assigned == nil

@@ -181,7 +181,7 @@ class Worker < BaseServer
       raise WorkerStateCorruptError if !@task_execution_thr.stop?
       @logger.debug "#{task.job_id}[#{task.id}] submitted"
       begin
-        @dispatcher.task_sent(task.job_id)
+        @dispatcher.task_sent(task.job_id, task.id)
         @logger.debug "Notified dispacher for accepting #{task.job_id}[#{task.id}]"
       rescue DRb::DRbConnError
         @logger.error "Error notifing dispacher for accepting #{task.job_id}[#{task.id}]"
@@ -279,7 +279,7 @@ class Worker < BaseServer
 
   def post_execution(result, client_id)
     @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
-    @dispatcher.task_done(result.job_id)
+    @dispatcher.task_done(result.job_id, result.task_id)
     @logger.debug "Send message to tell client #{client_id} #{result.job_id}[#{result.task_id}] done."
     @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
                                                                     :worker => @name,

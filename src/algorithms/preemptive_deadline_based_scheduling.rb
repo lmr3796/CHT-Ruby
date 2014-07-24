@@ -43,10 +43,10 @@ module SchedulingAlgorithm
       # Aggressively schedule the remaining ones to urgent ones.
       job_list.each_pair.sort_by{|job_id, job| job.deadline}.each do |job_id, job|
         break if remaining_worker.empty?
-        next if job.progress.undone <= schedule_result[job_id].size
-        @logger.debug "Earliest deadline: job_id, undone = #{job_id}, #{job.progress.undone}"
+        next if job.progress.undone.size <= schedule_result[job_id].size
+        @logger.debug "Earliest deadline: job_id, undone = #{job_id}, #{job.progress.undone.size}"
         worker_by_throughput = remaining_worker.sort_by{|worker_id| job.task_running_time_on_worker[worker_id]}
-        schedule_result[job_id] += worker_by_throughput.slice!(0, job.progress.undone - schedule_result[job_id].size)
+        schedule_result[job_id] += worker_by_throughput.slice!(0, job.progress.undone.size - schedule_result[job_id].size)
         remaining_worker = worker_by_throughput
       end
 
@@ -66,16 +66,16 @@ module SchedulingAlgorithm
       if current_timestamp > job.deadline
         @logger.warn "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
         @logger.warn "#{job_id} missed deadline; give as much as possble"
-        return 0, [worker_by_throughput.size, job.progress.undone].min
+        return 0, [worker_by_throughput.size, job.progress.undone.size].min
       end
 
       # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
-      required_throughput = job.progress.undone / Float(job.deadline-current_timestamp)
+      required_throughput = job.progress.undone.size / Float(job.deadline-current_timestamp)
       worker_by_throughput.each_with_index do |worker_id|
         break if total_throughput > required_throughput
-        break if needed_worker == job.progress.undone
+        break if needed_worker == job.progress.undone.size
         needed_worker += 1
 
         # Try to estimate run time then get workers to occupy
