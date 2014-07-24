@@ -22,7 +22,6 @@ module SchedulingAlgorithm
       # Schdule to just enough
       job_list.each_pair.sort_by{|job_id, job| job.priority}.each do |job_id, job|
         break if remaining_worker.empty?
-        @logger.debug "Just enough: job_id, undone = #{job_id}, #{job.progress.undone}"
         history = job_running_time[job_id]
         avg_time = history.reduce(:+)/history.size rescue nil
         job.avg_task_running_time = avg_time if avg_time != nil && avg_time > 0

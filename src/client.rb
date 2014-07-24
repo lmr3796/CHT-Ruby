@@ -55,7 +55,6 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
 
   def on_no_task_to_process(job_id, worker_name, worker_server)
     @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
-    @task_execution_checker.fire
     if @dispatcher.has_job?(job_id)
       begin
         @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
@@ -66,7 +65,23 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
       @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
       @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
     else
-      @logger.warn "#{job_id} doesn't exist after check."
+      @logger.warn "#{job_id} doesn't exist."
+    end
+    @task_execution_checker.fire
+
+
+    @logger.warn "After check"
+    if @dispatcher.has_job?(job_id)
+      begin
+        @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+      rescue Dispatcher::ClientJobList::JobNotExistError
+        @logger.warn "Job doesn't exist on dispatcher. Can't get progress"
+      end
+      @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+      @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
+      @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
+    else
+      @logger.warn "#{job_id} doesn't exist."
     end
     begin
       @dispatcher.reschedule
@@ -345,8 +360,8 @@ class Client
 
   def check_missing_task
     missing = []
-    ass = @execution_assignment.hash_clone # each is not implemented with rwlock...
-    ass.each do |j_and_t, worker_server|
+    # each is not implemented with rwlock...
+    @execution_assignment.hash_clone.each do |j_and_t, worker_server|
       # Workers may be failed here
       job_id, task_id = j_and_t
       begin

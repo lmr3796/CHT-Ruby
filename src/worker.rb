@@ -94,21 +94,21 @@ class Worker < BaseServer
   # Should only be invoked while Dispatcher#on_worker_available, so there
   # shouldn't be any race condition here.
   def assignment=(a)
-    @mutex.synchronize do
     a.is_a? JobAssignment or raise ArgumentError
-    @assignment.update do |_|
-      @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
-      a
-    end
+    @mutex.synchronize do
+      @assignment.update do |_|
+        @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+        a
+      end
 
-    #TODO: Refactor: make client messages as a queue and future value.
-    # So we can process it in main thread. The code will become cleaner
-    if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
-      self.status = STATUS::OCCUPIED
-      @logger.debug "Notifies main thread to keep executing"
-      @task_execution_thr.run
-    end
-    return
+      #TODO: Refactor: make client messages as a queue and future value.
+      # So we can process it in main thread. The code will become cleaner
+      if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
+        self.status = STATUS::OCCUPIED
+        @logger.debug "Notifies main thread to keep executing"
+        @task_execution_thr.run
+      end
+      return
     end
   end
 
@@ -152,11 +152,11 @@ class Worker < BaseServer
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
     @logger.warn "Not occupied, no need to release" and return if @status != STATUS::OCCUPIED
     if self.assignment.client_id != client_id || self.assignment.job_id != job_id
-      @logger.error("Invalid caller client: #{client_id}")
+      @logger.warn("Invalid caller client: #{client_id}")
       return false
     end
     @logger.warn "Releasing by #{client_id}:#{job_id}"
-    @task_execution_thr.raise(InvalidAssignmentError)
+    @task_execution_thr.raise(InvalidAssignmentError, 'Invalid on client release')
     @logger.warn "Released by #{client_id}:#{job_id}"
     return
   end
@@ -210,7 +210,7 @@ class Worker < BaseServer
   end
   private :validate_state_after_client_submission
 
-  # FIXME: Preemption lock is a dirty hack...
+  # FIXME: @preemption_lock is a dirty hack...
   def start
     loop do
       @preemption_lock.lock unless @preemption_lock.owned?
