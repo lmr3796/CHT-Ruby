@@ -280,6 +280,8 @@ class Worker < BaseServer
     @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     @result_manager.add_result(client_id, result)
     return result
+  ensure
+    @preemption_lock.lock unless @preemption_lock.owned?
   end
 
   def run_task(task)
