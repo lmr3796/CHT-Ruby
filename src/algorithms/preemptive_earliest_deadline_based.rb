@@ -9,8 +9,8 @@ module SchedulingAlgorithm
       # worker_status: {worker_id => status}
       # current_schedule: {job_id => [worker_id, ...]}
       # Return: {job_id => [worker_id, ...]}
-      # Concept: make jobs with higher priority meet their deadlines
-      # Priority represented by smaller number is of higher priority.
+      # Concept: take deadline as priority
+      # Priority represented by larger number is of higher priority.
 
       @logger = arg[:logger]
       current_timestamp = Time.now  # Should be consistent within the whole schedule process

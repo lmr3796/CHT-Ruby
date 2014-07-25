@@ -10,8 +10,8 @@ module SchedulingAlgorithm
       # current_schedule: {job_id => [worker_id, ...]}
       # Return: {job_id => [worker_id, ...]}
       # Concept:
-      # Priority represented by smaller number is of higher priority.
-      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
+      # Priority represented by larger number is of higher priority.
+      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }.reverse
       remaining_worker = worker_status.keys
       schedule_result = {}
       # Assign a worker for each job

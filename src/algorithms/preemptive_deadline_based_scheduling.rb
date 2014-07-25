@@ -10,7 +10,7 @@ module SchedulingAlgorithm
       # current_schedule: {job_id => [worker_id, ...]}
       # Return: {job_id => [worker_id, ...]}
       # Concept: make jobs with higher priority meet their deadlines
-      # Priority represented by smaller number is of higher priority.
+      # Priority represented by larger number is of higher priority.
 
       @logger = arg[:logger]
       current_timestamp = Time.now  # Should be consistent within the whole schedule process
@@ -20,7 +20,7 @@ module SchedulingAlgorithm
       schedule_result = Hash[job_list.keys.map{|j_id|[j_id,[]]}]
 
       # Schdule to just enough
-      job_list.each_pair.sort_by{|job_id, job| job.priority}.each do |job_id, job|
+      job_list.each_pair.sort_by{|job_id, job| job.priority}.reverse.each do |job_id, job|
         break if remaining_worker.empty?
         history = job_running_time[job_id]
         avg_time = history.reduce(:+)/history.size rescue nil

@@ -12,13 +12,13 @@ module SchedulingAlgorithm
       # current_schedule: {job_id => [worker_id, ...]}
       # Return: {job_id => [worker_id, ...]}
       # Concept: make jobs with higher priority meet their deadlines
-      # Priority represented by smaller number is of higher priority.
+      # Priority represented by larger number is of higher priority.
 
       @logger = arg[:logger]
       current_timestamp = Time.now  # Should be consistent within the whole schedule process
       job_running_time = arg[:job_running_time]
       worker_avg_running_time = arg[:job_running_time]
-      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }
+      job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }.reverse
       remaining_worker = worker_status.keys
       schedule_result = {}
 
