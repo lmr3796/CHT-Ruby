@@ -3,7 +3,7 @@ require 'time'
 require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
-  class PreemptiveDeadlineBasedScheduling
+  class PreemptiveNoPriorityDeadlineBasedScheduling
     def schedule_job(job_list, worker_status, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
@@ -20,7 +20,7 @@ module SchedulingAlgorithm
       schedule_result = Hash[job_list.keys.map{|j_id|[j_id,[]]}]
 
       # Schdule to just enough
-      job_list.each_pair.sort_by{|job_id, job| job.priority}.each do |job_id, job|
+      job_list.each_pair.sort_by{|job_id, job| job.deadline}.each do |job_id, job|
         break if remaining_worker.empty?
         history = job_running_time[job_id]
         avg_time = history.reduce(:+)/history.size rescue nil

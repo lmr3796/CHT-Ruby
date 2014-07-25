@@ -27,11 +27,18 @@ end
 
 class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
   extend Publisher
+  class JobNotExistError < RuntimeError; end
   can_fire :submission, :deletion
+
   def initialize(logger)
     super()
     @logger = logger
     return
+  end
+
+  def [](job_id)
+    raise JobNotExistError if !has_key?(job_id)
+    return super(job_id)
   end
 
   def []=(job_id, job)
@@ -54,9 +61,9 @@ class Dispatcher::JobList < ReadWriteLockHash  # {job_id => job_instance}
   end
 end
 
-class Dispatcher::ClientJobList < ReadWriteLockHash
+class Dispatcher::JobListByClient < ReadWriteLockHash
   def get_client_by_job(job_id)
-    each{|c, jl| return c if jl.include?(job_id)}
+    hash_clone.each{|c, jl| return c if jl.include?(job_id)}
     return
   end
 end
@@ -82,7 +89,7 @@ class Dispatcher::ScheduleManager
       begin
         job_running_time = @status_checker.job_running_time
         worker_avg_running_time = @status_checker.worker_avg_running_time
-        cloned_job_list = Hash.new.merge(@job_list)
+        cloned_job_list = @job_list.hash_clone
         workers_alive = @status_checker.worker_status.reject{|w,s| s == Worker::STATUS::DOWN || s == Worker::STATUS::UNKNOWN}
       rescue DRb::DRbConnError
         @logger.error "Error reaching status checker when scheduling"
@@ -128,7 +135,7 @@ class Dispatcher < BaseServer
     @decision_maker = arg[:decision_maker]
     @msg_service_server = MessageService::BasicServer.new
 
-    @client_job_list = ClientJobList.new
+    @client_job_list = JobListByClient.new
     @job_list = JobList.new @logger
     @schedule_manager = ScheduleManager.new(@job_list,
                                             :status_checker => @status_checker,
@@ -218,6 +225,10 @@ module Dispatcher::DispatcherClientInterface
     return job_list.map{|job| SecureRandom.uuid}
   end
 
+  def get_progress(job_id)
+    return @job_list[job_id].progress
+  end
+
   def submit_jobs(job_id_table, client_id)
     @logger.info "Job submitted: #{job_id_table.keys}"
     @client_job_list[client_id] += job_id_table.keys # Put it here for callback does not depend on client_id
@@ -235,22 +246,46 @@ module Dispatcher::DispatcherClientInterface
     return
   end
 
-  def redo_task(job_id)
-    @job_list[job_id].task_redo
-    @logger.warn "A task of #{job_id} needs redo, reschedule"
+  def task_redo(job_id, task_id)
+    @job_list[job_id].task_redo(task_id)
+    @logger.warn "#{job_id}[#{task_id}] needs redo, reschedule"
     reschedule
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
+  rescue => e
+    @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
-  def task_sent(job_id)
-    @job_list[job_id].task_sent
+  def task_sent(job_id, task_id)
+    @job_list[job_id].task_sent(task_id)
     # TODO: Release tail ones!!!
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
+  rescue => e
+    @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
-  def task_done(job_id)
-    @job_list[job_id].task_done
+  def task_done(job_id, task_id)
+    @job_list[job_id].task_done(task_id)
     return
+  rescue Dispatcher::JobList::JobNotExistError
+    @logger.error "#{job_id} doesn't exist"
+    raise
+  rescue => e
+    @logger.error e.message
+    @logger.error "Progress: #{@job_list[job_id].progress.inspect}"
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 
   def on_job_done(job_id)
@@ -264,16 +299,30 @@ module Dispatcher::DispatcherClientInterface
   end
 end
 
-module Dispatcher::DispatcherWorkerInterface 
+module Dispatcher::DispatcherWorkerInterface
+  RESCHEDULE_MAX_TRY = 3
+  def get_assigned_job(worker)
+    return @schedule_manager.worker_job_table[worker]
+  end
+
   # Returns next job assignment
   def on_worker_available(worker)
     @logger.info "Worker #{worker} is available"
-    next_job_assigned = nil
-    @resource_mutex.synchronize do
-      next_job_assigned = @schedule_manager.worker_job_table[worker]
-      next if next_job_assigned == nil
-      assign_worker_to_job(worker, next_job_assigned)
+    next_job_assigned = @resource_mutex.synchronize do
+      # Detect if it's a trailing one, if so then reschedule without notifications.
+      job_id = nil
+      RESCHEDULE_MAX_TRY.times do
+        job_id = get_assigned_job(worker)
+        break if job_id == nil
+        undone_cnt = get_progress(job_id).undone.size rescue nil
+        next if undone_cnt == nil
+        break if undone_cnt >= @schedule_manager.job_worker_table[job_id].size
+        @logger.info "Trailing worker #{worker} for #{job_id}, update schedule without notification."
+        reschedule
+      end
+      next job_id
     end
+    assign_worker_to_job(worker, next_job_assigned) if next_job_assigned != nil
     return next_job_assigned
   end
 end

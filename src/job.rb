@@ -1,25 +1,6 @@
 require 'atomic'
 require 'open3'
 
-class Job; end
-
-class Job::Progress
-  attr_accessor :queued, :sent, :done
-  def initialize(queued=0, sent=0, done=0)
-    @queued = queued
-    @sent = sent
-    @done = done
-  end
-
-  def total
-    return @queued + @sent + @done
-  end
-
-  def undone
-    return @queued + @sent
-  end
-end
-
 class Job
   attr_reader :task
   attr_accessor :priority, :deadline, :task_running_time_on_worker, :avg_task_running_time
@@ -39,45 +20,34 @@ class Job
     t.id = @task.size
     @progress.update do |progress|
       @task << t
-      p = progress.clone
-      p.queued += 1
-      next p
+      progress.mutate(:queued => +1)
     end
     return
   end
 
-  def task_redo
+  def task_redo(task_id)
     @progress.update do |progress|
-      p = progress.clone
-      p.sent -= 1
-      p.queued += 1
-      next p
+      progress.task_redo(task_id)
     end
     return
   end
 
-  def task_sent
+  def task_sent(task_id)
     @progress.update do |progress|
-      p = progress.clone
-      p.queued -= 1
-      p.sent += 1
-      next p
+      progress.task_sent(task_id)
     end
     return
   end
 
-  def task_done
+  def task_done(task_id)
     @progress.update do |progress|
-      p = progress.clone
-      p.sent -= 1
-      p.done += 1
-      next p
+      progress.task_done(task_id)
     end
     return
   end
 
   def progress
-    return @progress.value
+    return @progress.value.clone
   end
 
   def deadline=(deadline)
@@ -94,12 +64,80 @@ class Job
   def marshal_load(array)
     @task, @priority, @deadline, @task_running_time_on_worker, @progress = array
     @deadline = Time.at(deadline)
-    @progress = Atomic.new(@progress)
+    @progress = Atomic.new(Job::Progress.new(@progress))
   end
 
   def eql?(rhs)
     return false unless rhs.is_a? Job
     return marshal_dump().eql?(rhs.marshal_dump())
+  end
+end
+
+class Job::Progress
+  attr_reader :queued, :sent, :done
+  class InconsistentUpdateError < RuntimeError;end
+  module JobState
+    QUEUED=:QUEUED
+    SENT=:SENT
+    DONE=:DONE
+  end
+
+  def clone
+    return self.class.new(self)
+  end
+
+  def initialize(job_status=[])
+    job_status = job_status.job_status if job_status.is_a?(self.class)
+    raise ArgumentError unless job_status.is_a?(Array)
+    @job_status = job_status.clone
+    return
+  end
+
+  def [](task_id)
+    return @job_status[task_id]
+  end
+
+  def job_status
+    return @job_status.clone
+  end
+
+  def add_task
+    @job_status << JobState::QUEUED
+  end
+
+  def task_sent(task_id)
+    @job_status[task_id] = JobState::SENT
+    return self
+  end
+
+  def task_done(task_id)
+    @job_status[task_id] = JobState::DONE
+    return self
+  end
+
+  def task_redo(task_id)
+    @job_status[task_id] = JobState::QUEUED
+    return self
+  end
+
+  def total
+    return @job_status.size
+  end
+
+  def queued
+    return @job_status.each_with_index.select{|s, i| s == JobState::QUEUED}.map{|s,i| i}
+  end
+
+  def sent
+    return @job_status.each_with_index.select{|s, i| s == JobState::SENT}.map{|s,i| i}
+  end
+
+  def done
+    return @job_status.each_with_index.select{|s, i| s == JobState::DONE}.map{|s,i| i}
+  end
+
+  def undone
+    return @job_status.each_with_index.select{|s, i| s != JobState::DONE}.map{|s,i| i}
   end
 end
 

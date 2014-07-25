@@ -25,7 +25,7 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_name = m.content[:worker]
     return if !@task_queue.has_key?(job_id) # Job outdated; nevermind it.
     @logger.warn "#{job_id}[#{task_id}] on #{worker_name} is preempted."
-    on_result_lost(job_id, task_id)
+    @task_execution_checker.fire
   end
 
   def on_worker_available(m)
@@ -36,18 +36,16 @@ module ClientMessageHandler include MessageService::Client::MessageHandler
     worker_server = DRbObject.new_with_uri(m.content[:uri]) if m.content[:uri] != nil
     if !@task_queue.has_key?(job_id)
       @logger.warn("#{job_id} doesn't exist.")
-      worker_server.validate_occupied_assignment or worker_server.release(@uuid)
+      raise ThreadError
       return
     end
     task = @task_queue[job_id].pop(true)                              # Nonblocked, raise error if empty
     submit_task_to_worker(job_id, task, worker_name, worker_server)   # Handles DRb::DRbConnError inside
   rescue DRb::DRbConnError
     @logger.error "Error contacting worker #{worker_name}"
-  rescue ThreadError # On empty task Queue
+  rescue ThreadError # On no task to do
     # Workers may finish and come back before we fetch last result and delete job.
-    @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
-    @dispatcher.reschedule
-    worker_server.validate_occupied_assignment or worker_server.release(@uuid, job_id)
+    on_no_task_to_process(job_id, worker_name, worker_server)
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
@@ -104,19 +102,21 @@ class Client
     raise ArgumentError if job_id == nil
     raise ArgumentError if task == nil
     raise ArgumentError if worker_server== nil
-    if worker_server.submit_task(task, @uuid)
-      @dispatcher.task_sent(job_id)
-      @execution_assignment[[job_id, task.id]] = worker_server
-      @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
-    else
-      # On submission rejected
-      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
-      redo_task(job_id, task.id)
+    submission_status = nil
+    begin
+      submission_status = worker_server.submit_task(task, @uuid)
+    rescue DRb::DRbConnError
+      @logger.error "Error contacting worker #{worker_name} to submit the task."
     end
-    return
-  rescue DRb::DRbConnError
-    @logger.error "Error contacting worker #{worker_name} to submit the task."
-    redo_task(job_id, task.id)
+
+    if !submission_status
+      # On submission rejected or failed
+      @logger.warn "Submission of #{job_id}[#{task.id}] rejected by #{worker_name}. Worker probably gets scheduled to another job"
+      task_redo(job_id, task.id)
+      return
+    end
+    @execution_assignment[[job_id, task.id]] = worker_server
+    @logger.debug "Popped #{job_id}[#{task.id}] to worker #{worker_name}"
     return
   end
   private :submit_task_to_worker
@@ -148,7 +148,6 @@ class Client
     raise ArgumentError if !job_id_list.is_a? Array
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @submitted_jobs.keys).empty?
     raise ArgumentError, "Invalid job id(s) provided" if !(job_id_list - @job_done.keys).empty?
-    @logger.debug "Checking on #{job_id_list}"
     job_id_list.each{|j| return false unless @job_done[j]}
     return true
   rescue ArgumentError
@@ -254,11 +253,6 @@ class Client
 
         # TODO what if poller find out before this???
         @execution_assignment.delete([job_id, r.task_id])
-        begin
-          @dispatcher.task_done(job_id)
-        rescue DRb::DRbConnError
-          @logger.error "Error when notifing dispacher #{job_id}[#{r.task_id}] done."
-        end
         @logger.debug "Updated running status of #{job_id}[#{r.task_id}]"
       end
     end
@@ -294,16 +288,7 @@ class Client
   def run_periodic_task_execution_checker
     @task_execution_checker_timer_group = Timers::Group.new
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
-      missing_task = check_missing_task
-      @dispatcher.tell_worker_down_detected
-      missing_task.each{|job_id, task_id| on_result_lost(job_id, task_id)}
-      # Stop polling if no pending jobs
-      @rwlock.with_write_lock do
-        if done?(@submitted_jobs.keys)
-          @logger.warn "No pending jobs, no need to check for results"
-          @task_execution_checker.pause
-        end
-      end
+      check_execution
     end
     @timer_thr = Thread.new do
       loop do
@@ -313,15 +298,21 @@ class Client
   end
   private :run_periodic_task_execution_checker
 
-  def check_missing_task
+  def check_execution
     missing = []
-    ass = Hash.new.merge(@execution_assignment) # each is not implemented with rwlock...
-    ass.each do |j_and_t, worker_server|
-      # Workers may be failed here
+    result_ready = []
+    results = {}
+
+    @execution_assignment.hash_clone.each do |j_and_t, worker_server|
       job_id, task_id = j_and_t
       begin
-        missing << j_and_t if worker_server.current_execution_of(@uuid) != j_and_t &&
-          !worker_server.exist_result?(job_id, task_id, @uuid)
+        if worker_server.exist_result?(job_id, task_id, @uuid)
+          result_ready << j_and_t
+        elsif worker_server.current_execution_of(@uuid) != j_and_t
+          missing << j_and_t
+        else
+          next  # Result not ready, still excuting
+        end
       rescue DRb::DRbConnError => e
         @logger.error "Worker is found down, take it as lost."
         @logger.error e.message
@@ -331,18 +322,96 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
-    return missing
+    result_ready.each do |job_id, task_id|
+      begin
+        results[job_id] = [] if !results.has_key?(job_id)
+        results[job_id] += @execution_assignment[[job_id, task_id]].get_results(@uuid, job_id)
+      rescue DRb::DRbConnError
+        @logger.error "Error contacting worker to fetch result of #{job_id}[#{task_id}], take it as lost."
+        missing << j_and_t
+      rescue => e
+        @logger.error e.message
+        @logger.error e.backtrace.join("\n")
+      end
+    end
+    results.each do |job_id, result_list|
+      add_results(result_list, job_id)
+      job_done(job_id) if !@results[job_id].include? nil
+    end
+    missing.each{|job_id, task_id| on_result_lost(job_id, task_id)}
+    @dispatcher.tell_worker_down_detected if !missing.empty?
+
+    # Pause polling if no pending jobs
+    @rwlock.with_write_lock do
+      if done?(@submitted_jobs.keys)
+        @logger.warn "No pending jobs, no need to check for results"
+        @task_execution_checker.pause
+      end
+    end
   end
 
   def on_result_lost(job_id, task_id)
     @logger.warn "Result of #{job_id}[#{task_id}] lost or preempted, asked to redo"
-    redo_task(job_id, task_id)
+    task_redo(job_id, task_id)
     # In this case, we've already told dispatcher task sent, so tell it to redo is necessary
-    @dispatcher.redo_task(job_id)
+    @dispatcher.task_redo(job_id, task_id)
     return
+  rescue DRb::DRbConnError
+    @logger.error "Error notifing dispatcher for redo #{job_id}[#{task_id}]"
+  rescue Dispatcher::JobList::JobNotExistError
   end
+  private :on_result_lost
 
-  def redo_task(job_id, task_id)
+  def on_no_task_to_process(job_id, worker_name, worker_server)
+    @logger.warn "#{job_id} received worker #{worker_name} but no task to process"
+    if @dispatcher.has_job?(job_id)
+      begin
+        @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+      rescue Dispatcher::ClientJobList::JobNotExistError
+        @logger.warn "Job doesn't exist on dispatcher. Can't get progress"
+      end
+      @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+      @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
+      @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
+    else
+      @logger.warn "#{job_id} doesn't exist."
+    end
+    @task_execution_checker.fire
+
+    @logger.warn "After check"
+    if @dispatcher.has_job?(job_id)
+      begin
+        @logger.warn "#{job_id} progress: #{@dispatcher.get_progress(job_id).inspect}"
+      rescue Dispatcher::ClientJobList::JobNotExistError
+        @logger.warn "Job doesn't exist on dispatcher. Can't get progress"
+      end
+      @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+      @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
+      @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
+    else
+      @logger.warn "#{job_id} doesn't exist."
+    end
+    begin
+      @dispatcher.reschedule
+    rescue DRb::DRbConnError
+      @logger.error "Error contacting dispatcher to reschedule"
+      @logger.error e.backtrace.join("\n")
+    end
+    begin
+      assignment_valid = worker_server.validate_occupied_assignment
+      worker_server.release(@uuid, job_id) if assignment_valid
+    rescue DRb::DRbConnError => e
+      @logger.error "Error contacting worker to release"
+      @logger.error e.backtrace.join("\n")
+    end
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
+  end
+  private :on_no_task_to_process
+
+  def task_redo(job_id, task_id)
     @execution_assignment.delete([job_id, task_id])
     @task_queue[job_id] << @submitted_jobs[job_id].task[task_id]
     return

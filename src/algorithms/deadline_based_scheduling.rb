@@ -49,16 +49,16 @@ module SchedulingAlgorithm
       if current_timestamp > job.deadline
         @logger.warn "Deadline of #{job_id} is #{job.deadline} and now is #{current_timestamp}"
         @logger.warn "#{job_id} missed deadline; give as much as possble"
-        return 0, [worker_by_throughput.size, job.progress.undone].min
+        return 0, [worker_by_throughput.size, job.progress.undone.size].min
       end
 
       # Compute the range of worker required to make the job meet its deadline
       needed_worker = 0
       total_throughput = 0.0
-      required_throughput = job.progress.undone / Float(job.deadline-current_timestamp)
+      required_throughput = job.progress.undone.size / Float(job.deadline-current_timestamp)
       worker_by_throughput.each_with_index do |worker_id|
         break if total_throughput > required_throughput
-        break if needed_worker == job.progress.undone
+        break if needed_worker == job.progress.undone.size
         needed_worker += 1
 
         # Try to estimate run time then get workers to occupy

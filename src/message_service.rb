@@ -189,6 +189,10 @@ module MessageService
       #@logger.debug "Send #{m} to #{handler_name}"
       @handler.send(handler_name, m)  # The ruby way to invoke method by its name string
       return
+    rescue => e
+      @logger.error e.message
+      @logger.error e.backtrace.join("\n")
+      system('killall ruby')
     end
 
     def process_message_queue
