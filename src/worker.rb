@@ -14,6 +14,7 @@ require_relative 'message_service'
 class Worker < BaseServer; end
 class Worker::WorkerStateCorruptError < RuntimeError; end
 class Worker::InvalidAssignmentError < RuntimeError; end
+class Worker::PreemptedError < RuntimeError; end
 
 Worker::JobAssignment = Struct.new(:job_id, :client_id)
 
@@ -38,6 +39,7 @@ class Worker < BaseServer
     @id = SecureRandom::uuid()
     @name = name
     @mutex = Mutex.new
+    @preemption_lock = Mutex.new
     @status = STATUS::UNKNOWN
     @avg_running_time = nil
     @result_manager = TaskResultManager.new
@@ -79,30 +81,35 @@ class Worker < BaseServer
     when STATUS::AVAILABLE
       fetch_assignment
     end
+  rescue DRbConnError
+    @logger.error "Error contacting status checker to mark status"
+  ensure
     return s
   end
 
   def assignment
-    return @assignment.value
+    return @assignment.value.clone
   end
 
   # Should only be invoked while Dispatcher#on_worker_available, so there
   # shouldn't be any race condition here.
   def assignment=(a)
     a.is_a? JobAssignment or raise ArgumentError
-    @assignment.update do |_|
-      @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
-      a
-    end
+    @mutex.synchronize do
+      @assignment.update do |_|
+        @logger.debug "Assigned with job:#{a.job_id}, client:#{a.client_id}"
+        a
+      end
 
-    #TODO: Refactor: make client messages as a queue and future value.
-    # So we can process it in main thread. The code will become cleaner
-    if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
-      self.status = STATUS::OCCUPIED
-      @logger.debug "Notifies main thread to keep executing"
-      @task_execution_thr.run
+      #TODO: Refactor: make client messages as a queue and future value.
+      # So we can process it in main thread. The code will become cleaner
+      if @status == STATUS::AVAILABLE # This if checking is very critical. It may corrupt condition variable waiting to be corrupted
+        self.status = STATUS::OCCUPIED
+        @logger.debug "Notifies main thread to keep executing"
+        @task_execution_thr.run
+      end
+      return
     end
-    return
   end
 
   def tell_client_ready(client_id, job_id)
@@ -122,29 +129,39 @@ class Worker < BaseServer
     @logger.warn "Not available, can't be awoken" and return if @status != STATUS::AVAILABLE
     @logger.debug "Awoken to fetch new assignment"
     next_job_assigned = fetch_assignment
-    @logger.debug "Fetched #{next_job_assigned.inspect}" if next_job_assigned != nil
+    @logger.debug "Fetched #{next_job_assigned.inspect}"
     return
   end
 
   def validate_occupied_assignment  # OCCUPIED ONLY
     @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
+    @logger.warn "Can't lock @mutex, not in a state to validate" and return true if !@mutex.try_lock
+
+    # @mutex locked
+    @logger.warn "Not occupied, no need to validate" and return true if @status != STATUS::OCCUPIED
     @logger.debug "Validating assignment"
-    valid = @mutex.synchronize{@dispatcher.has_job?(self.assignment.job_id)}
-    valid ?
-      @logger.debug("Assignment of job #{self.assignment.job_id} valid.") :
-      @task_execution_thr.raise(InvalidAssignmentError)
+    valid = @dispatcher.get_assigned_job(@name) == self.assignment.job_id
+    @logger.debug("Assignment of job #{self.assignment.job_id} is #{valid ? 'valid' : 'invalid'}.")
+    if !valid
+      @logger.debug("Release on self validation")
+      # Prevents from reraise in rescue...
+      @task_execution_thr.raise(InvalidAssignmentError, 'Invalid on self validation')
+    end
     return valid
   rescue DRb::DRbConnError
     @logger.error "Can't reach dispatcher to validate assignment."
+  ensure
+    @mutex.unlock if @mutex.owned?
   end
 
   def release(client_id, job_id)            # Should only be invoked by client on OCCUPIED
+    @logger.warn "Not occupied, no need to release" and return if @status != STATUS::OCCUPIED
     if self.assignment.client_id != client_id || self.assignment.job_id != job_id
-      @logger.error("Invalid caller client: #{client_id}")
+      @logger.warn("Invalid caller client: #{client_id}")
       return false
     end
     @logger.warn "Releasing by #{client_id}:#{job_id}"
-    @task_execution_thr.raise(InvalidAssignmentError)
+    @task_execution_thr.raise(InvalidAssignmentError, 'Invalid on client release')
     @logger.warn "Released by #{client_id}:#{job_id}"
     return
   end
@@ -172,10 +189,23 @@ class Worker < BaseServer
       raise WorkerStateCorruptError if self.status != STATUS::OCCUPIED
       raise WorkerStateCorruptError if !@task_execution_thr.stop?
       @logger.debug "#{task.job_id}[#{task.id}] submitted"
+      begin
+        @dispatcher.task_sent(task.job_id, task.id)
+        @logger.debug "Notified dispacher for accepting #{task.job_id}[#{task.id}]"
+      rescue DRb::DRbConnError
+        @logger.error "Error notifing dispacher for accepting #{task.job_id}[#{task.id}]"
+      end
       self.status = STATUS::BUSY
       @task_ready.signal
       return true
     end
+  rescue WorkerStateCorruptError => e
+    @logger.error e.message
+    @logger.error "Status = #{self.status}"
+    @logger.error "Execution thread task status = #{@task_execution_thr.status}"
+    @logger.error "Execution thread task = #{@task_execution_thr[:task].inspect}"
+    @logger.error e.backtrace.join("\n")
+    return false
   end
 
   def validate_state_after_client_submission
@@ -185,52 +215,73 @@ class Worker < BaseServer
   end
   private :validate_state_after_client_submission
 
+  # FIXME: @preemption_lock is a dirty hack...
   def start
     loop do
-      Thread::stop if @status == STATUS::AVAILABLE
-      @mutex.synchronize do  # Worker is dedicated
+      begin
+        operate_state
+      rescue InvalidAssignmentError => e
+        @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
+        @logger.warn e.message
+      end
+    end
+  rescue => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby') # FIXME: remove this
+  end
+
+  def operate_state
+    self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
+    @preemption_lock.lock unless @preemption_lock.owned?
+    Thread.current[:task] = Thread.current[:client_id] = nil
+    Thread::stop if @status == STATUS::AVAILABLE
+    @mutex.synchronize do  # Worker is dedicated
+      begin
+        # Must be OCCUPIED here and client waits for client to submit a task
+        raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
+        a = self.assignment
+        @task_ready = ConditionVariable.new
+        tell_client_ready(a.client_id, a.job_id)
+        @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
+        validate_state_after_client_submission
+
+        # Task submitted. Run!!!
+        task, client_id = [Thread.current[:task], Thread.current[:client_id]]
+        result = run_task_and_log(task, client_id)
+
+        # Task done
+        post_execution(result, client_id)
+        raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
+      rescue PreemptedError
+        @logger.warn "#{task.job_id}[#{task.id}] is preempted."
         begin
-          # Must be OCCUPIED here and client waits for client to submit a task
-          raise WorkerStateCorruptError, "Status should be OCCUPIED" if @status != STATUS::OCCUPIED
-
-          a = self.assignment
-          @task_ready = ConditionVariable.new
-          tell_client_ready(a.client_id, a.job_id)
-          #Timeout::timeout(DEFAULT_TIMEOUT)  # TODO: Maybe enable this in production....
-          @task_ready.wait(@mutex)            # FIXME: might get waken by #assignment=
-          validate_state_after_client_submission
-
-          # Task submitted. Run!!!
-          task, client_id = [Thread.current[:task], Thread.current[:client_id]]
-          result = run_task(task)
-          log_running_time(result.job_id, result.run_time)
-          @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
-          @result_manager.add_result(client_id, result)
-          @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+          @dispatcher.push_message(client_id, MessageService::Message.new(:task_preempted,
                                                                           :worker => @name,
                                                                           :job_id => task.job_id,
                                                                           :task_id => task.id))
-          Thread.current[:task] = Thread.current[:client_id] = nil
-          raise WorkerStateCorruptError, "Status should be BUSY" if @status != STATUS::BUSY
-
-        rescue Timeout::Error
-          @logger.warn "Waited too long for assignment #{self.assignment.inspect}"
-        rescue InvalidAssignmentError
-          @logger.warn "Assignment of job #{self.assignment.job_id} invalid, release."
-        rescue WorkerStateCorruptError => e
-          @logger.fatal e.message
-          @logger.fatal e.backtrace.join("\n")
-          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
-        rescue => e
-          @logger.error e.message
-          @logger.error e.backtrace.join("\n")
-          system('killall ruby') # FIXME: Remove this after fixing state corrupt bug; debug use!!!
-        ensure
-          Thread.current[:task] = Thread.current[:client_id] = nil
-          self.status = STATUS::AVAILABLE # This triggers pulling next assignment from dispatcher
+        rescue DRb::DRbConnError
+          @logger.error "Error pushing message to client to tell #{task.job_id}[#{task.id}] is preempted."
         end
+      rescue WorkerStateCorruptError => e
+        @logger.fatal e.message
+        @logger.fatal e.backtrace.join("\n")
+      ensure
+        @status = STATUS::AVAILABLE
       end
     end
+  end
+
+  def run_task_and_log(task, client_id)
+    @preemption_lock.unlock
+    result = run_task(task)
+    @preemption_lock.lock unless @preemption_lock.owned?
+    log_running_time(result.job_id, result.run_time)
+    @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
+    @result_manager.add_result(client_id, result)
+    return result
+  ensure
+    @preemption_lock.lock unless @preemption_lock.owned?
   end
 
   def run_task(task)
@@ -239,6 +290,18 @@ class Worker < BaseServer
     @logger.info "Running `#{task.cmd} #{task.args.join(' ')}`"
     result = task.run
     return result
+  end
+
+  def post_execution(result, client_id)
+    @logger.debug "Notify dispacher #{result.job_id}[#{result.task_id}] done."
+    @dispatcher.task_done(result.job_id, result.task_id)
+    @logger.debug "Send message to tell client #{client_id} #{result.job_id}[#{result.task_id}] done."
+    @dispatcher.push_message(client_id, MessageService::Message.new(:task_result_available,
+                                                                    :worker => @name,
+                                                                    :job_id => result.job_id,
+                                                                    :task_id => result.task_id))
+  rescue DRb::DRbConnError
+    @logger.error "Error when notifing dispacher #{result.job_id}[#{result.task_id}] done."
   end
 
   # TODO: lower the cost of get_result
@@ -265,6 +328,17 @@ class Worker < BaseServer
 
   def exist_result?(job_id, task_id, client_id)
     @result_manager.exist_result?(job_id, task_id, client_id)
+  end
+
+  def preempt_if_unmatch(job_id)
+    return unless @preemption_lock.try_lock # If we can't lock it, it means it's not running a task
+    @task_execution_thr.raise(PreemptedError) if @task_execution_thr[:task].job_id != job_id rescue nil
+    @preemption_lock.unlock
+    return
+  rescue ThreadError => e
+    @logger.error e.message
+    @logger.error e.backtrace.join("\n")
+    system('killall ruby')
   end
 end
 

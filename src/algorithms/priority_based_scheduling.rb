@@ -27,7 +27,7 @@ module SchedulingAlgorithm
         break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id] }
-        worker_needed = [worker_by_throughput.size, job.task_remaining - 1].min
+        worker_needed = [worker_by_throughput.size, job.progress.undone.size - 1].min
         schedule_result[job_id] << worker_by_throughput.slice!(0, worker_needed)
         schedule_result[job_id].flatten!
         remaining_worker = worker_by_throughput
