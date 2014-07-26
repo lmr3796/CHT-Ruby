@@ -228,7 +228,6 @@ class Worker < BaseServer
   rescue => e
     @logger.error e.message
     @logger.error e.backtrace.join("\n")
-    system('killall ruby') # FIXME: remove this
   end
 
   def operate_state
@@ -276,7 +275,7 @@ class Worker < BaseServer
     @preemption_lock.unlock
     result = run_task(task)
     @preemption_lock.lock unless @preemption_lock.owned?
-    log_running_time(result.job_id, result.run_time)
+    log_running_time(result.job_id, result.run_time) rescue nil
     @logger.debug "Finished #{result.job_id}[#{result.task_id}] in #{result.run_time} seconds"
     @result_manager.add_result(client_id, result)
     return result
