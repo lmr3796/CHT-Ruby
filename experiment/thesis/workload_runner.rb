@@ -33,6 +33,7 @@ module WorkloadRunner
       logger.warn "Submit #{b[:batch].size} jobs. #{jobs_left}/#{total_jobs} left!"
     end
     client.wait_all
+    client.stop
     return {:jobs => client.submitted_jobs.hash_clone,
             :finish_time=>client.finish_time,
             :submit_time=>client.submit_time}
