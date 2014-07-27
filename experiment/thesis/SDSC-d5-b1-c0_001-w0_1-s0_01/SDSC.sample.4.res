@@ -15,3 +15,9 @@ sys	0m35.032s
 real	121m49.983s
 user	1m9.548s
 sys	0m24.382s
+./run_exp.sh: line 4: 22732 Terminated              ./workload_executer.rb -i $f -o ${f}.out 2> client.log
+201 out of 321 jobs met deadline.
+
+real	115m3.437s
+user	0m57.636s
+sys	0m20.910s
