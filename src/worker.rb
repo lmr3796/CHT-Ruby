@@ -8,6 +8,7 @@ require 'securerandom'
 require_relative 'common/rwlock'
 
 require_relative 'base_server'
+require_relative 'dispatcher'
 require_relative 'job'
 require_relative 'message_service'
 
