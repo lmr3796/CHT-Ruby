@@ -10,7 +10,8 @@ module CHT_Configuration
     # ALGORITHM = YourModule::YourAlgorithm
     #ALGORITHM = DeadlineBasedScheduling  #Just Provide class name
     #ALGORITHM = PreemptiveDeadlineBasedScheduling  #Just Provide class name
-    ALGORITHM = PreemptiveNoPriorityDeadlineBasedScheduling  #Just Provide class name
+    #ALGORITHM = PreemptiveNoPriorityDeadlineBasedScheduling  #Just Provide class name
+    ALGORITHM = EarliestDeadlineFirstScheduling  #Just Provide class name
   end
   module Address
     module DefaultPorts

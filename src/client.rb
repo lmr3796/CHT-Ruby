@@ -370,7 +370,8 @@ class Client
       rescue Dispatcher::ClientJobList::JobNotExistError
         @logger.warn "Job doesn't exist on dispatcher. Can't get progress"
       end
-      @logger.warn "#{job_id} assignment: #{@execution_assignment.select{|k,v|k[0] == job_id}}"
+      matching_assignment = Hash[@execution_assignment.select{|k,v|k[0] == job_id}.map{|k,v| ["#{k[0]}[#{k[1]}]", v]}]
+      @logger.warn "#{job_id} assignment: #{matching_assignment}"
       @logger.warn "#{job_id} task queue size: #{@task_queue[job_id].size rescue nil}"
       @logger.warn "#{job_id} result nil: #{@results[job_id].each_with_index.select{|r,i| r==nil}.map{|r,i| i} rescue nil}"
     else

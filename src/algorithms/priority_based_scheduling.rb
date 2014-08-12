@@ -1,9 +1,7 @@
 require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
-  class PriorityBasedScheduling
-    def initialize()
-    end
+  class PriorityBasedScheduling < AbstractAlgorithm
     def schedule_job(job_list, worker_status, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
@@ -27,7 +25,7 @@ module SchedulingAlgorithm
         break if remaining_worker.empty?
         job = job_list[job_id]
         worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id] }
-        worker_needed = [worker_by_throughput.size, job.progress.undone.size - 1].min
+        worker_needed = [worker_by_throughput.size, job.progress.undone.size].min
         schedule_result[job_id] << worker_by_throughput.slice!(0, worker_needed)
         schedule_result[job_id].flatten!
         remaining_worker = worker_by_throughput
