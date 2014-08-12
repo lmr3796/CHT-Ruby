@@ -3,7 +3,7 @@ require 'time'
 require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
-  class DeadlineBasedScheduling
+  class DeadlineBasedScheduling < AbstractAlgorithm
     def initialize()
     end
     def schedule_job(job_list, worker_status, arg={})

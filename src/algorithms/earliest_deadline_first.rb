@@ -2,8 +2,6 @@ require_relative 'abstract_algorithm'
 
 module SchedulingAlgorithm
   class EarliestDeadlineFirstScheduling < AbstractAlgorithm
-    def initialize()
-    end
     def schedule_job(job_list, worker_status, arg={})
       # job_list: {job_id => Job instance}
       # worker_status: {worker_id => status}
