@@ -17,10 +17,10 @@ class Job
 
   # Should be invoked only on Task generation
   def add_task(t)
-    t.id = @task.size
     @progress.update do |progress|
+      t.id = @task.size
       @task << t
-      progress.mutate(:queued => +1)
+      progress.add_task
     end
     return
   end
