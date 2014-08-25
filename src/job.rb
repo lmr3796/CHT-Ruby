@@ -247,11 +247,19 @@ class SleepTask < Task
 end
 
 class GPUSleepTask < SleepTask
+  def self.from_sleep_task(t)
+    raise ArgumentError unless t.is_a? SleepTask
+    new_task = self.new(t.sleep_time)
+    new_task.job_id = t.job_id
+    new_task.id = t.id
+    return new_task
+  end
+
   def initialize(*args)
     super
   end
 
-  def to_sleep_task(factor)
+  def to_reduced_sleep_task(factor)
     raise ArgumentError if !factor.is_a? Numeric
     new_task = Marshal.load(Marshal.dump(self))
     new_task.sleep_time = @sleep_time * factor

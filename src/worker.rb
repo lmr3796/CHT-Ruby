@@ -477,7 +477,7 @@ class SimulatedGPUHeterogeneousWorker < SimulatedHeterogeneousWorker
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
     if task.is_a? GPUSleepTask
       @logger.warn "#{task.job_id}[#{task.id}] is a GPU task; reduce its running time."
-      task = task.to_sleep_task(@gpu_factor)
+      task = task.to_reduced_sleep_task(@gpu_factor)
     end
     return super(task)
   end
