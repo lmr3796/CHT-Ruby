@@ -103,6 +103,7 @@ class Job::Progress
 
   def add_task
     @job_status << JobState::QUEUED
+    return self
   end
 
   def task_sent(task_id)
@@ -198,7 +199,7 @@ class TaskResult
 end
 
 class SleepTask < Task
-  attr_reader :sleep_time
+  attr_accessor :sleep_time
   def self.get_synthesized_success_status
     _1, _2, _3, wait_thr = Open3.popen3('sleep 0')
     return wait_thr.value
@@ -237,5 +238,23 @@ class SleepTask < Task
   def eql?(rhs)
     return false unless rhs.is_a? Task
     return marshal_dump().eql?(rhs.marshal_dump())
+  end
+
+  def sleep_time=(t)
+    raise ArugmentError unless t.is_a? Numeric
+    @sleep_time = t
+  end
+end
+
+class GPUSleepTask < SleepTask
+  def initialize(*args)
+    super
+  end
+
+  def to_sleep_task(factor)
+    raise ArgumentError if !factor.is_a? Numeric
+    new_task = Marshal.load(Marshal.dump(self))
+    new_task.sleep_time = @sleep_time * factor
+    return new_task
   end
 end

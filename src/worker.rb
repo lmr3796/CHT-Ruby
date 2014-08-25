@@ -421,29 +421,28 @@ class Worker::ClearResultRequest
 end
 
 class SimulatedHeterogeneousWorker < Worker
-  attr_accessor :argument
-
-  def initialize(name, args={})
-    super
+  attr_accessor :heterogeneous_factor
+  def initialize(name, heterogeneous_factor, args={})
+    super(name, args)
     # TODO: receive the arguments of the distribution of actual sleeping time
-    self.argument = args[:simulation_argument]
+    self.heterogeneous_factor = heterogeneous_factor
   end
 
-  def argument=(a)
-    raise ArgumentError if !a.is_a? Numeric
-    @argument = a
+  def heterogeneous_factor=(a)
+    raise ArgumentError unless a.is_a? Numeric
+    @heterogeneous_factor = a
   end
+
 
   # TODO: Change this model
   def additional_sleep_time(task)
     raise ArgumentError if !task.is_a? Task
     return 0.0 if !task.is_a? SleepTask
-    return Random.rand(@argument) * task.sleep_time
+    return Random.rand(@heterogeneous_factor) * task.sleep_time
   end
 
   def run_task(task)
     @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
-    @logger.debug "#{task.job_id}[#{task.id}] running."
     @logger.debug "Running `#{task.cmd} #{task.args.join(' ')}` in simulated heterogeneous environment"
 
     # Additional sleep to simulate
@@ -458,5 +457,28 @@ class SimulatedHeterogeneousWorker < Worker
     result.run_time += hetero_time
 
     return result
+  end
+end
+
+class SimulatedGPUHeterogeneousWorker < SimulatedHeterogeneousWorker
+  attr_accessor :gpu_factor
+  DEFAULT_GPU_FACTOR = 0.1
+  def initialize(name, heterogeneous_factor, gpu_factor, args={})
+    super(name, heterogeneous_factor, args)
+    self.gpu_factor = gpu_factor
+  end
+
+  def gpu_factor=(f)
+    raise ArgumentError if !f.is_a? Numeric
+    @gpu_factor = f
+  end
+
+  def run_task(task)
+    @logger.fatal task.inspect and raise 'Invalid task to run' if !task.is_a? Task
+    if task.is_a? GPUSleepTask
+      @logger.warn "#{task.job_id}[#{task.id}] is a GPU task; reduce its running time."
+      task = task.to_sleep_task(@gpu_factor)
+    end
+    return super(task)
   end
 end

@@ -20,6 +20,8 @@ OptionParser.new do |opts|
     options[:name] = name
     options[:host] ||= CHT_Configuration::Address::WORKERS[name][:address] rescue nil
     options[:port] ||= CHT_Configuration::Address::WORKERS[name][:port] rescue nil
+    options[:heterogeneous_factor] ||= CHT_Configuration::WORKER_PARAMETER[name][:heterogeneous_factor] rescue nil
+    options[:gpu_factor] ||= CHT_Configuration::WORKER_PARAMETER[name][:gpu_factor] rescue nil
   end
 
   # Specify the port to listen
@@ -32,32 +34,32 @@ OptionParser.new do |opts|
     options[:status_checker_address] = addr
   end
 
-  # Specify the status checker address
+  # Specify the dispatcher address
   opts.on('-d dispatcher_address', '--dispatcher_address dispatcher_address', 'Specify address of dispatcher') do |addr|
     options[:dispatcher_address] = addr
   end
 
-  opts.on('--simulated-heterogeneous', 'Enable/disable heterogeneous simulation.') do
-    options[:simulated_heterogeneous] = true
-  end
-
   # TODO: parse the arguments of distribution of actual sleeping time
-  opts.on('-a simulation-argument', '--simulation-argument simulation_argument', Float, 'Specify the argument for simulating heterogeneous environment') do |arg|
-    options[:simulation_argument] = arg
+  msg = 'Specify the argument for simulating heterogeneous environment. \
+          This enables heterogeneous simulation'
+  opts.on('-a heterogeneous-factor', '--heterogeneous-factor heterogeneous_factor', Float, msg) do |arg|
+    options[:heterogeneous_factor] = arg
   end
 
 end.parse!
+
+# TODO: set the default value of the arguments of distribution of actual sleeping time
+if options[:gpu_factor] != nil && options[:heterogeneous_factor] == nil
+  $stderr.puts("Arguments of heterogeneous simulation not matching.\n")
+  p options
+  exit(false)
+end
 
 options[:host] ||= '127.0.0.1'
 options[:port] ||= (ARGV.shift || CHT_Configuration::Address::DefaultPorts::WORKER_DEFAULT_PORT).to_i
 options[:name] ||= ARGV.shift || `hostname` || SecureRandom.uuid
 options[:status_checker_address] = "druby://#{options[:status_checker_address]}" if options[:status_checker_address]
 options[:dispatcher_address] = "druby://#{options[:dispatcher_address]}" if options[:dispatcher_address]
-# TODO: set the default value of the arguments of distribution of actual sleeping time
-if (options[:simulated_heterogeneous] != nil) != (options[:simulation_argument] != nil)
-  $stderr.puts("Arguments of heterogeneous simulation not matching.\n")
-  exit(false)
-end
 
 
 if !ARGV.empty?
@@ -77,15 +79,24 @@ dispatcher = DRbObject.new_with_uri dispatcher_druby_uri
 
 worker_druby_uri = CHT_Configuration::Address.druby_uri(:address => '', :port => options[:port])
 external_worker_uri = CHT_Configuration::Address.druby_uri(:address => options[:host], :port => options[:port])
-worker_class = options[:simulated_heterogeneous] ? SimulatedHeterogeneousWorker : Worker
-worker = worker_class.new(options[:name],
-                    :logger=>logger,
-                    :status_checker=>status_checker,
-                    :dispatcher=>dispatcher,
-                    :uri => external_worker_uri,
-                    # TODO: pass the arguments of distribution of actual sleeping time
-                    :simulation_argument=>options[:simulation_argument]
-                   )
+
+name = options[:name]
+arg = {
+  :logger=>logger,
+  :status_checker=>status_checker,
+  :dispatcher=>dispatcher,
+  :uri => external_worker_uri,
+}
+
+worker = case
+         when options[:gpu_factor]
+           SimulatedGPUHeterogeneousWorker.new(name, options[:heterogeneous_factor], options[:gpu_factor], arg)
+         when options[:heterogeneous_factor]
+           SimulatedHeterogeneousWorker.new(name, options[:heterogeneous_factor], arg)
+         else
+           Worker.new(name, arg)
+         end
+
 DRb.start_service worker_druby_uri, worker
 logger.info "Worker #{options[:name]} running on #{worker_druby_uri}..."
 logger.info "Worker external uri set to #{external_worker_uri}..."

@@ -38,15 +38,15 @@ module CHT_Configuration
       #'linux14-2' => {:address => 'linux14.csie.org', :port => 20002},
       #'linux14-3' => {:address => 'linux14.csie.org', :port => 20003},
       #'linux14-4' => {:address => 'linux14.csie.org', :port => 20004},
-      'localhost1' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT},
-      'localhost2' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+2},
-      'localhost3' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+3},
-      'localhost4' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+4},
-      'localhost5' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+5},
-      'localhost6' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+6},
-      'localhost7' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
-      'localhost8' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
-      'localhost9' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
+      'localhost1'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT},
+      'localhost2'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+2},
+      'localhost3'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+3},
+      'localhost4'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+4},
+      'localhost5'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+5},
+      'localhost6'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+6},
+      'localhost7'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
+      'localhost8'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
+      'localhost9'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
       'localhost10' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+10},
       'localhost11' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+11},
       'localhost12' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+12},
@@ -68,6 +68,29 @@ module CHT_Configuration
       return "druby://#{socket[:address]}:#{socket[:port]}"
     end
   end
+
+  WORKER_PARAMETER = {
+    'localhost1'  => {:heterogeneous_factor => 0.5},
+    'localhost2'  => {:heterogeneous_factor => 0.5},
+    'localhost3'  => {:heterogeneous_factor => 0.5},
+    'localhost4'  => {:heterogeneous_factor => 0.5},
+    'localhost5'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost6'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost7'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost8'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost9'  => {:heterogeneous_factor => 1.0},
+    'localhost10' => {:heterogeneous_factor => 1.0},
+    'localhost11' => {:heterogeneous_factor => 1.0},
+    'localhost12' => {:heterogeneous_factor => 1.0},
+    'localhost13' => {:heterogeneous_factor => 1.2},
+    'localhost14' => {:heterogeneous_factor => 1.2},
+    'localhost15' => {:heterogeneous_factor => 1.2},
+    'localhost16' => {:heterogeneous_factor => 1.2},
+    'localhost17' => {:heterogeneous_factor => 1.5},
+    'localhost18' => {:heterogeneous_factor => 1.5},
+    'localhost19' => {:heterogeneous_factor => 1.5},
+    'localhost20' => {:heterogeneous_factor => 1.5},
+  }
 
   STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
   LOGGER_LEVEL = Logger::DEBUG # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]
