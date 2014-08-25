@@ -132,7 +132,7 @@ class Client
     @results = {}
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @logger = logger
-    run_periodic_task_execution_checker
+    create_periodic_task_execution_checker
     return
   end
 
@@ -221,7 +221,6 @@ class Client
       end
       @task_queue[job_id] = tq
     end
-    @rwlock.with_write_lock{@task_execution_checker.continue}   # Must make sure poller is prepared
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
     raise 'Submissiion failure' if job_id_list != jobs.keys
@@ -229,6 +228,8 @@ class Client
     job_id_list.each{|job_id|@submit_time[job_id] = submit_time}
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
+
+    @rwlock.with_write_lock{@timer_thr.run}   # Must make sure poller is prepared
     return job_id_list
   end
 
@@ -285,18 +286,21 @@ class Client
     @timer_thr.kill
   end
 
-  def run_periodic_task_execution_checker
+  def create_periodic_task_execution_checker
     @task_execution_checker_timer_group = Timers::Group.new
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
       check_execution
     end
     @timer_thr = Thread.new do
+      Thread::stop
       loop do
         @task_execution_checker_timer_group.wait
       end
     end
+    loop {break if @timer_thr.stop?}  # Wait until @timer_thr is sleeping
+    return
   end
-  private :run_periodic_task_execution_checker
+  private :create_periodic_task_execution_checker
 
   def check_execution
     missing = []
@@ -322,6 +326,7 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
+
     result_ready.each do |job_id, task_id|
       begin
         results[job_id] = [] if !results.has_key?(job_id)
@@ -334,6 +339,7 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
+
     results.each do |job_id, result_list|
       add_results(result_list, job_id)
       job_done(job_id) if !@results[job_id].include? nil
@@ -345,7 +351,7 @@ class Client
     @rwlock.with_write_lock do
       if done?(@submitted_jobs.keys)
         @logger.warn "No pending jobs, no need to check for results"
-        @task_execution_checker.pause
+        Thread::stop
       end
     end
   end
