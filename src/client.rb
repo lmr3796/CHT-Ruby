@@ -229,7 +229,14 @@ class Client
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
 
-    @rwlock.with_write_lock{@timer_thr.run}   # Must make sure poller is prepared
+    # Must make sure poller is prepared
+    @rwlock.with_write_lock do
+      if @timer_thr.stop?
+        @task_execution_checker.continue
+        @timer_thr.run
+      end
+    end
+
     return job_id_list
   end
 
@@ -291,13 +298,13 @@ class Client
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
       check_execution
     end
+    @task_execution_checker.pause
     @timer_thr = Thread.new do
-      Thread::stop
       loop do
+        Thread::exclusive{Thread::stop if @task_execution_checker_timer_group.empty?}
         @task_execution_checker_timer_group.wait
       end
     end
-    loop {break if @timer_thr.stop?}  # Wait until @timer_thr is sleeping
     return
   end
   private :create_periodic_task_execution_checker
@@ -351,9 +358,10 @@ class Client
     @rwlock.with_write_lock do
       if done?(@submitted_jobs.keys)
         @logger.warn "No pending jobs, no need to check for results"
-        Thread::stop
+        @task_execution_checker.pause
       end
     end
+    return
   end
 
   def on_result_lost(job_id, task_id)
