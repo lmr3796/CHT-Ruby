@@ -9,6 +9,11 @@ class DecisionMaker < BaseServer
     return
   end
 
+  def algorithm=(alg)
+    @algorithm = alg
+    @logger.info "Scheduling policy set to #{alg.class}"
+  end
+
   def schedule_job(job_list, worker_status, arg={})
     @logger.info "Rescheduling on #{job_list.keys}"
 
