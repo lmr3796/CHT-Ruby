@@ -39,6 +39,20 @@ module SchedulingAlgorithm
         schedule_result[job_id] = [remaining_worker[best_worker_index]]
         remaining_worker.delete_at(best_worker_index)
       end
+
+      # Allocate the rest
+      job_id_by_priority[1..-1].each do |job_id|
+        break if remaining_worker.empty?
+        job = job_list[job_id]
+        worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id] }
+        worker_needed = [(worker_by_throughput.size * (1 - PRESERVE_RATE)).round, job.progress.undone.size].min
+        logger.debug "Unpreserved = #{(worker_by_throughput.size * (1 - PRESERVE_RATE)).round}"
+        logger.debug "Undone = #{job.progress.undone.size}"
+        logger.debug "Needed = #{worker_needed}"
+        schedule_result[job_id] = worker_by_throughput.slice!(0, worker_needed)
+        remaining_worker = worker_by_throughput
+      end
+
       return schedule_result
     end
   end
