@@ -15,6 +15,7 @@ module SchedulingAlgorithm
       job_id_by_priority = job_list.keys.sort_by{ |job_id| job_list[job_id].priority }.reverse
       remaining_worker = worker_status.keys
       schedule_result = {}
+      logger = arg[:logger]
 
       return schedule_result if job_list.empty?
 
@@ -22,6 +23,10 @@ module SchedulingAlgorithm
       job = job_list[job_id_by_priority[0]]
       worker_by_throughput = remaining_worker.sort_by{ |worker_id| job.task_running_time_on_worker[worker_id] }
       worker_needed = [(worker_by_throughput.size * (1 - PRESERVE_RATE)).round, job.progress.undone.size].min
+      logger.debug "Unpreserved = #{(worker_by_throughput.size * (1 - PRESERVE_RATE)).round}"
+      logger.debug "Undone = #{job.progress.undone.size}"
+      logger.debug "Needed = #{worker_needed}"
+
       schedule_result[job_id_by_priority[0]] = worker_by_throughput.slice!(0, worker_needed)
       remaining_worker = worker_by_throughput
 
