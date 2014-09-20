@@ -18,3 +18,8 @@ sys	1m11.054s
 real	101m30.118s
 user	3m25.334s
 sys	1m20.094s
+209 out of 321 jobs met deadline.
+
+real	128m30.602s
+user	4m26.732s
+sys	1m40.949s
