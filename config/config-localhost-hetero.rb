@@ -70,6 +70,28 @@ module CHT_Configuration
     end
   end
 
+  WORKER_PARAMETER = {
+    'localhost1'  => {:heterogeneous_factor => 0.5},
+    'localhost2'  => {:heterogeneous_factor => 0.5},
+    'localhost3'  => {:heterogeneous_factor => 0.5},
+    'localhost4'  => {:heterogeneous_factor => 0.5},
+    'localhost5'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost6'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost7'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost8'  => {:heterogeneous_factor => 0.8, :gpu_factor => 0.1},
+    'localhost9'  => {:heterogeneous_factor => 1.0},
+    'localhost10' => {:heterogeneous_factor => 1.0},
+    'localhost11' => {:heterogeneous_factor => 1.0},
+    'localhost12' => {:heterogeneous_factor => 1.0},
+    'localhost13' => {:heterogeneous_factor => 1.2},
+    'localhost14' => {:heterogeneous_factor => 1.2},
+    'localhost15' => {:heterogeneous_factor => 1.2},
+    'localhost16' => {:heterogeneous_factor => 1.2},
+    'localhost17' => {:heterogeneous_factor => 1.5},
+    'localhost18' => {:heterogeneous_factor => 1.5},
+    'localhost19' => {:heterogeneous_factor => 1.5},
+    'localhost20' => {:heterogeneous_factor => 1.5},
+  }
 
   STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
   LOGGER_LEVEL = Logger::DEBUG # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]
