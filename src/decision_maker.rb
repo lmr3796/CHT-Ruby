@@ -4,7 +4,7 @@ class DecisionMaker < BaseServer
   attr_writer :status_checker, :algorithm
   def initialize(alg, status_checker=nil, arg={})
     super arg[:logger]
-    @algorithm = alg
+    self.algorithm = alg
     @status_checker = status_checker
     return
   end
