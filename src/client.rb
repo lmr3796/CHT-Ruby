@@ -289,7 +289,7 @@ class Client
   end
 
   def stop_periodic_task_execution_checker
-    @task_execution_checker_timer_group.pause_all
+    @task_execution_checker_timer_group.pause
     @timer_thr.kill
   end
 
