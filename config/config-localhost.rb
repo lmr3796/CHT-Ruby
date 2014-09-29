@@ -8,10 +8,11 @@ module CHT_Configuration
     include SchedulingAlgorithm
     # require 'path/to/your/algorithm-without-extension-name'
     # ALGORITHM = YourModule::YourAlgorithm
+    ALGORITHM = PriorityBasedScheduling  #Just Provide class name
     #ALGORITHM = DeadlineBasedScheduling  #Just Provide class name
     #ALGORITHM = PreemptiveDeadlineBasedScheduling  #Just Provide class name
     #ALGORITHM = PreemptiveNoPriorityDeadlineBasedScheduling  #Just Provide class name
-    ALGORITHM = EarliestDeadlineFirstScheduling  #Just Provide class name
+    #ALGORITHM = EarliestDeadlineFirstScheduling  #Just Provide class name
   end
   module Address
     module DefaultPorts
@@ -38,15 +39,15 @@ module CHT_Configuration
       #'linux14-2' => {:address => 'linux14.csie.org', :port => 20002},
       #'linux14-3' => {:address => 'linux14.csie.org', :port => 20003},
       #'linux14-4' => {:address => 'linux14.csie.org', :port => 20004},
-      'localhost1' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT},
-      'localhost2' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+2},
-      'localhost3' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+3},
-      'localhost4' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+4},
-      'localhost5' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+5},
-      'localhost6' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+6},
-      'localhost7' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
-      'localhost8' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
-      'localhost9' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
+      'localhost1'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT},
+      'localhost2'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+2},
+      'localhost3'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+3},
+      'localhost4'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+4},
+      'localhost5'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+5},
+      'localhost6'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+6},
+      'localhost7'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+7},
+      'localhost8'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+8},
+      'localhost9'  => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+9},
       'localhost10' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+10},
       'localhost11' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+11},
       'localhost12' => {:address => '127.0.0.1', :port => DefaultPorts::WORKER_DEFAULT_PORT+12},
@@ -68,6 +69,7 @@ module CHT_Configuration
       return "druby://#{socket[:address]}:#{socket[:port]}"
     end
   end
+
 
   STATUS_CHECKER_UPDATE_PERIOD = 10 #seconds
   LOGGER_LEVEL = Logger::DEBUG # Logger::[INFO/WARN/DEBUG/ERROR/FATAL/UNKNOWN]

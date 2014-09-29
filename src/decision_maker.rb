@@ -4,9 +4,14 @@ class DecisionMaker < BaseServer
   attr_writer :status_checker, :algorithm
   def initialize(alg, status_checker=nil, arg={})
     super arg[:logger]
-    @algorithm = alg
+    self.algorithm = alg
     @status_checker = status_checker
     return
+  end
+
+  def algorithm=(alg)
+    @algorithm = alg
+    @logger.info "Scheduling policy set to #{alg.class}"
   end
 
   def schedule_job(job_list, worker_status, arg={})

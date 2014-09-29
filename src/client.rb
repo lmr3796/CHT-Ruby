@@ -132,7 +132,7 @@ class Client
     @results = {}
     @dispatcher = DRbObject.new_with_uri(dispatcher_uri)
     @logger = logger
-    run_periodic_task_execution_checker
+    create_periodic_task_execution_checker
     return
   end
 
@@ -221,7 +221,6 @@ class Client
       end
       @task_queue[job_id] = tq
     end
-    @rwlock.with_write_lock{@task_execution_checker.continue}   # Must make sure poller is prepared
 
     job_id_list = @dispatcher.submit_jobs(jobs, @uuid)
     raise 'Submissiion failure' if job_id_list != jobs.keys
@@ -229,6 +228,15 @@ class Client
     job_id_list.each{|job_id|@submit_time[job_id] = submit_time}
     # TODO submission failure??
     @logger.info "Job submitted: id mapping: #{job_id_list}"
+
+    # Must make sure poller is prepared
+    @rwlock.with_write_lock do
+      if @timer_thr.stop?
+        @task_execution_checker.continue
+        @timer_thr.run
+      end
+    end
+
     return job_id_list
   end
 
@@ -281,22 +289,25 @@ class Client
   end
 
   def stop_periodic_task_execution_checker
-    @task_execution_checker_timer_group.pause_all
+    @task_execution_checker_timer_group.pause
     @timer_thr.kill
   end
 
-  def run_periodic_task_execution_checker
+  def create_periodic_task_execution_checker
     @task_execution_checker_timer_group = Timers::Group.new
     @task_execution_checker = @task_execution_checker_timer_group.every(RESULT_POLLING_INTERVAL) do
       check_execution
     end
+    @task_execution_checker.pause
     @timer_thr = Thread.new do
       loop do
+        Thread::exclusive{Thread::stop if @task_execution_checker_timer_group.empty?}
         @task_execution_checker_timer_group.wait
       end
     end
+    return
   end
-  private :run_periodic_task_execution_checker
+  private :create_periodic_task_execution_checker
 
   def check_execution
     missing = []
@@ -322,6 +333,7 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
+
     result_ready.each do |job_id, task_id|
       begin
         results[job_id] = [] if !results.has_key?(job_id)
@@ -334,6 +346,7 @@ class Client
         @logger.error e.backtrace.join("\n")
       end
     end
+
     results.each do |job_id, result_list|
       add_results(result_list, job_id)
       job_done(job_id) if !@results[job_id].include? nil
@@ -348,6 +361,7 @@ class Client
         @task_execution_checker.pause
       end
     end
+    return
   end
 
   def on_result_lost(job_id, task_id)

@@ -8,7 +8,11 @@ ARGV.each do |f|
   f.close
   batch.each do |b|
     b[:batch].each do |j|
-      j.priority = rand(0...1000.0)
+      j.task.each_with_index do |t, i|
+        new_task = SleepTask.new(t.args[0].to_f)
+        new_task.id = t.id
+        j.task[i] = new_task
+      end
     end
   end
   f = open(f,'w')
