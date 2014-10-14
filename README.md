@@ -23,4 +23,10 @@ rescheduling
 
 1. when a job is done: assign the workers to other jobs if necessary
 2. when a job is submitted: find idle workers for the job; if none, get some workers from other job (after their current task is done).
+------
+Configuration
 
+By defauilt, it takes config/config.rb as configuration file.
+I made it a soft link so that you can easily switch between configurations.
+`config-localhost.rb` is an example of configuring homogeneous environment
+`config-localhost-hetero.rb` for heterogeneous environment
