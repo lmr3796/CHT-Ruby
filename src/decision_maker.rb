@@ -44,11 +44,11 @@ class ViolationCheckingDecisionMaker < DecisionMaker
 
   def log_priority_violation(result, job_list)
     scheduled = job_list.select{|job_id, job| result[job_id].size > 0}
-    unscheduled = job_list.reject{|job_id, job| result[job_id].size > 0 || job.undone == 0}
-    unscheduled.each do |unscheduled_job_id, unscheduled_job|
-      scheduled.each do |scheduled_job_id, scheduled_job|
-        @logger.warn "#{unscheduled_job_id}(#{unscheduled_job.priority}) violated by #{scheduled_job_id}(#{scheduled_
-        job.priority})" if unscheduled_job.priority > scheduled_job.priority
+    unscheduled = job_list.reject{|job_id, job| result[job_id].size > 0 || job.progress.undone.size == 0}
+    unscheduled.each do |unsch_job_id, unsch_job|
+      scheduled.each do |sch_job_id, sch_job|
+        @logger.warn "#{unsch_job_id}(#{unsch_job.priority}) violated by #{sch_job_id}(#{sch_job.priority})" if unsch_job.priority > sch_job.priority
+        @logger.warn "#{unsch_job_id} has #{unsch_job.progress.undone.size} undone"
       end
     end
     #job_list.each do |job_id, job|
