@@ -15,3 +15,6 @@ echo 'Running DeadlineNoPriority'
 echo 'Running DeadlinePriority'
 ../../algorithm_changer.rb $D_MAKER_ADDR PreemptiveDeadlineBasedScheduling 
 ./run_exp.sh wagap-d5-b1-c0_0001-w0_1-s0_01-DeadlinePriority/wagap.sample.?
+
+sleep 3
+killall ruby

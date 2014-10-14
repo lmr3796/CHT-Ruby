@@ -4,3 +4,11 @@ Please refer to http://www.cs.huji.ac.il/labs/parallel/workload/swf.html
 2. I manually parsed them into .csv files
 
 3. `cht.yml' is a tmuxinator configuration file. It let's you easily launch the environments.
+	`mux cht` to launch enviornment and `./run_SDSC.sh` or `./run_hetero_SDSC.sh` to conduct workload
+
+4. For priority violation rate, `./normalized_violation_calculator.rb $DECISION_MAKER_LOG_FILE` will do.
+
+5. For deadline miss penalty, `./penalty_calculators.rb [.out files...]`
+
+6. wagap series is not working now.
+
